@@ -3,6 +3,9 @@ import numpy as np
 import math
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
+import random
+import scipy.stats as st
+
 
 
 def softmax(U,beta):
@@ -54,9 +57,16 @@ class MultinomialLogReg:
 
         ret = sc.fmin_l_bfgs_b(log_likelihood, x0 =beta, args = (X,y), approx_grad = True)
         #print(ret)
-        self.beta = ret[0].reshape(shape)
+        beta = ret[0].reshape(shape)
 
-        return ret
+        model = MultinomialModel(beta)
+
+        return model
+
+class MultinomialModel:
+
+    def __init__(self, beta):
+        self.beta = beta
 
     def predict(self, X):
         predict = []
@@ -68,6 +78,18 @@ class MultinomialLogReg:
             predict.append(index)
 
         return predict
+
+    def log_loss(self, X,y):
+        loss = 0
+        for i,x in enumerate(X):
+            U = np.dot(self.beta[:, 1:], x)
+            real = y[i]
+            soft = softmax(U, self.beta)
+            l = soft[real]
+            loss -= math.log(l)
+        loss = loss / len(y)
+        return loss
+
 
 def inv_logit(x):
     #return 1./(1.+math.e**(-x))
@@ -119,12 +141,19 @@ class OrdinalLogReg:
 
         ret = sc.fmin_l_bfgs_b(ordinal_log_likelihood, beta, args=(X, y), approx_grad=True)
         #print(ret)
-        self.deltas = ret[0][:len(list(set(y)))-2]
-        self.beta = ret[0][len(list(set(y)))-2:]
+        deltas = ret[0][:len(list(set(y)))-2]
+        beta = ret[0][len(list(set(y)))-2:]
         #print(self.deltas)
         #print(self.beta)
+        model = OrdinalModel( deltas, beta )
 
-        return ret
+        return model
+
+
+class OrdinalModel:
+    def __init__(self, deltas, beta):
+        self.deltas = deltas
+        self.beta = beta
 
     def predict(self, X):
         predict = []
@@ -141,6 +170,34 @@ class OrdinalLogReg:
             predict.append(pi.index(max(pi)))
         return predict
 
+    def log_loss(self, X, y):
+        loss = 0
+
+        t = np.cumsum(self.deltas)
+        t = np.append([-np.inf, 0], t)
+        t = np.append(t, [np.inf])
+
+        for i,x in enumerate(X):
+            ui = np.dot(self.beta[1:], x) + self.beta[0]
+            pi = []
+            for j in range(1, len(t)):
+                pi.append(inv_logit(t[j] - ui) - inv_logit(t[j - 1] - ui))
+            real = y[i]
+            l = pi[real]
+            loss -= math.log(l)
+        loss = loss / len(y)
+        return loss
+
+def naive_log_loss(y):
+    p = [0.15, 0.1, 0.05, 0.4, 0.3]
+    l = 0
+    for i in y:
+        l -= math.log(p[i])
+    loss = l/len(y)
+    return loss
+
+
+
 def missclassification( predicted, real ):
     if( len(predicted) != len(real) ):
         return ""
@@ -154,40 +211,62 @@ def missclassification( predicted, real ):
     return count/len(real)
 
 
+def CV_log_loss(X,y,k):
+    n = len(y)
+    multi_losses = []
+    ordinal_losses = []
+    naive_losses = []
+
+    #create indexes and shuffle them to get elements for k folds
+    i_shuffled = [i for i in range(n)]
+    random.seed(0)
+    random.shuffle( i_shuffled )
+    indexes_folds = [ ]
+    for i in range(k):
+        j = i_shuffled[(i) * n // k: n * (i + 1) // k]
+        indexes_folds.append(j)  # save only indexes for each fold
+
+    for i in range(k):
+        all_folds = [j for j in range(k)]
+        all_folds.remove(i) #remove the index for test fold
+
+        x_test = X[ indexes_folds[i] ].reshape((len(indexes_folds[i]),len(X[0])))
+        y_test = y[ indexes_folds[i] ]
+
+        x_train = np.array([])
+        y_train = np.array([])
+        for j in all_folds:
+            x_train = np.append( x_train, X[ indexes_folds[j] ] )
+            y_train = np.append( y_train, y[ indexes_folds[j] ] )
+
+        x_train = x_train.reshape(((k-1)*n//k,len(X[0])))
+        #make all 3 models and calculate log_loss
+        multi = MultinomialLogReg()
+        multi_model = multi.build( x_train, y_train )
+        multi_log_loss = multi_model.log_loss( x_test, y_test )
+        multi_losses.append( multi_log_loss )
+
+        ordinal = OrdinalLogReg()
+        ordinal_model = ordinal.build( x_train, y_train )
+        ordinal_log_loss = ordinal_model.log_loss( x_test, y_test )
+        ordinal_losses.append( ordinal_log_loss )
+
+        naive_loss = naive_log_loss(y_test)
+        naive_losses.append( naive_loss )
+
+    print(multi_losses)
+    print(ordinal_losses)
+    print(naive_losses)
+
+    multinomial_ci = st.t.interval(0.95, len(multi_losses) - 1, np.mean(multi_losses), st.sem(multi_losses))
+    ordinal_ci = st.t.interval(0.95, len(ordinal_losses) - 1, np.mean(ordinal_losses), st.sem(ordinal_losses))
+    naive_ci = st.t.interval(0.95, len(naive_losses) - 1, np.mean(naive_losses), st.sem(naive_losses))
+    return multinomial_ci, ordinal_ci, naive_ci
+
+
 
 if __name__ == "__main__":
-    print("Hello")
-    X = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9],[0,1,1]])
-    X = X / np.sum(X, axis=0)
-    y = np.array([1, 0, 2,1])
 
-    shape = (len(list(set(y))) - 1, X.shape[1] + 1)
-    #beta = np.ones(shape) / 2
-
-    width = len(X[0])
-    height = max(y)
-    beta2 = 0.5 * np.ones((height, width))
-    #print(f"Mine beta: {beta2}")
-    #for i in X:
-        #U = np.dot(beta[:,1:], i)
-        #print(softmax(U, beta))
-
-    multinomial = OrdinalLogReg()
-    multinomial.build(X, y)
-    #predict = multinomial.predict(X)
-    '''
-    beta = np.array([ 1,  1, 1, 1, 1])  # 3 classi
-    x = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
-    x = x / np.sum(x, axis=0)# 3 podatki, z 3 parametri
-    y = np.array([1, 0, 2])
-    #U = np.dot(beta,x[2])
-    #U = np.append(U,[0])
-    #print(softmax(U))
-    c = OrdinalLogReg()
-    #print(ordinal_log_likelihood(beta, x, y))
-    c.build(x,y)
-    print(c.predict(x))
-    '''
     df = pd.read_csv('dataset.csv', sep=";")
 
     #process y values
@@ -216,12 +295,22 @@ if __name__ == "__main__":
     split = 80*n // 100
     x_train, y_train = X[:split,:], y[:split]
     x_test, y_test = X[split:,:], y[split:]
-    #print(x_test)
+
+    '''
+    multinomial = MultinomialLogReg()
+    model = multinomial.build(x_train,y_train)
+    predict = model.predict(x_test)
+    print(missclassification(predict, y_test))
+    loss = model.log_loss(x_test,y_test)
+    print(loss)
 
     multinomial = OrdinalLogReg()
-    multinomial.build(x_train,y_train)
-    predict = multinomial.predict(x_test)
+    model = multinomial.build(x_train, y_train)
+    predict = model.predict(x_test)
     print(missclassification(predict, y_test))
+    loss = model.log_loss(x_test, y_test)
+    print(loss)'''
+    print(CV_log_loss(X,y,5))
 
 
 
