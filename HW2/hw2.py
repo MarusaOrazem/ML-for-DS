@@ -5,27 +5,34 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler
 
 
-def softmax(U):
+def softmax(U,beta):
     result = []
+    #print(f"U : {len(U)}, beta : {len(beta)} ")
+    #print(U)
+    #print(beta)
     divider = 0
-    for i in U:
-        divider += math.e ** i
-    for u in U:
-        result.append( (math.e ** u) /divider)
+    for k, i in enumerate(U):
+        divider += math.e ** (i + beta[k][0])
+    for k, u in enumerate(U):
+        result.append((math.e ** (u + beta[k][0])) / (1+divider))
+    result.append(1/(1+divider))
 
     return result
 
 def log_likelihood(beta, *args ):
     X,y = args
-    beta = beta.reshape((max(y), len(X[0])))
+    shape = (len(list(set(y))) - 1, X.shape[1] + 1)
+    #beta = beta.reshape((max(y), len(X[0])))
+    beta = beta.reshape(shape)
     l = 0
     for i, x in enumerate(X):
         #print(beta)
         #print(x)
-        U = np.dot(beta, x)
-        U = np.append(U, [0])
-        soft = softmax(U)
+        U = np.dot(beta[:,1:], x)
+        #U = np.append(U, [0])
+        soft = softmax(U,beta)
         predict = y[i]
+        #print(f"predict: {predict}")
         pij = soft[predict]
         l -= math.log(pij)
     return l
@@ -39,41 +46,47 @@ class MultinomialLogReg:
     def build(self,X,y):
         width = len(X[0])
         height = max(y)
-        beta = 0.5*np.ones((height, width))
+        #beta = 0.5*np.ones((height, width))
+        shape = (len(list(set(y))) - 1, X.shape[1] + 1)
+        beta = np.ones(shape) / 2
         #print(beta)
 
 
-        ret = sc.fmin_l_bfgs_b(log_likelihood, beta, args = (X,y), approx_grad = True)
+        ret = sc.fmin_l_bfgs_b(log_likelihood, x0 =beta, args = (X,y), approx_grad = True)
         #print(ret)
-        self.beta = ret[0].reshape((height,width))
+        self.beta = ret[0].reshape(shape)
 
         return ret
 
     def predict(self, X):
         predict = []
         for x in X:
-            U = np.dot(self.beta, x)
-            U = np.append(U, [0])
-            soft = softmax(U)
+            U = np.dot(self.beta[:,1:], x)
+            #U = np.append(U, [0])
+            soft = softmax(U, self.beta)
             index = soft.index(max(soft))
             predict.append(index)
 
         return predict
 
 def inv_logit(x):
-    print(x)
-    return 1./(1.+math.e**(-x))
+    #return 1./(1.+math.e**(-x))
+    return 1 / 2 + 1 / 2 * np.tanh(x/2)
 
 
 def ordinal_log_likelihood(beta, *args):
     X, y = args
-    delta, beta = beta[:len(y)-2], beta[len(y)-2:]
+    #print(beta)
+    delta, beta = beta[:len(list(set(y)))-2], beta[len(list(set(y)))-2:]
+    #print(delta)
+    #print(beta)
     t = np.cumsum(delta)
     t = np.append([-np.inf, 0], t)
     t = np.append(t,[np.inf])
     #print(f"t: {t}")
     #print(f"beta: {beta}")
     l = 0
+    eps = 1e-10
     for i, x in enumerate(X):
         #print(f"x: {x}")
         real_class = y[i]
@@ -85,6 +98,8 @@ def ordinal_log_likelihood(beta, *args):
         #print(f"a: {a}")
         #print(f"b: {b}")
         #print(f"pi: {pi}")
+        if pi < eps:
+            pi = eps
         l -= math.log(pi)
     return l
 
@@ -95,14 +110,17 @@ class OrdinalLogReg:
         self.name = "bla"
 
     def build(self, X, y):
-        beta = np.ones(len(y)-2 + len(y)+1)
+        beta = np.ones(len(list(set(y)))-2 + len(X[0])+1)/15
         #print(beta)
         #beta = np.array([ 1,  1,  1, 1,1])
+        delta0 = np.ones(len(list(set(y))) - 2) * 1e-10
+        beta0 = np.ones(len(X[0]) + 1) / 15
+        beta = np.append(delta0, beta0)
 
         ret = sc.fmin_l_bfgs_b(ordinal_log_likelihood, beta, args=(X, y), approx_grad=True)
         #print(ret)
-        self.deltas = ret[0][:len(y)-2]
-        self.beta = ret[0][len(y)-2:]
+        self.deltas = ret[0][:len(list(set(y)))-2]
+        self.beta = ret[0][len(list(set(y)))-2:]
         #print(self.deltas)
         #print(self.beta)
 
@@ -117,10 +135,10 @@ class OrdinalLogReg:
 
         for x in X:
             ui = np.dot(self.beta[1:], x) + self.beta[0]
-            for i in range(len(t)):
-                if t[i]>=ui:
-                    predict.append(i-1)
-                    break
+            pi = []
+            for j in range(1, len(t)):
+                pi.append(inv_logit(t[j] - ui) - inv_logit(t[j - 1] - ui))
+            predict.append(pi.index(max(pi)))
         return predict
 
 def missclassification( predicted, real ):
@@ -133,12 +151,30 @@ def missclassification( predicted, real ):
         if( j == real[ i ]):
             count += 1
     print(f"{count}/{len(real)}")
-    return 1-count/len(real)
+    return count/len(real)
 
 
 
 if __name__ == "__main__":
     print("Hello")
+    X = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9],[0,1,1]])
+    X = X / np.sum(X, axis=0)
+    y = np.array([1, 0, 2,1])
+
+    shape = (len(list(set(y))) - 1, X.shape[1] + 1)
+    #beta = np.ones(shape) / 2
+
+    width = len(X[0])
+    height = max(y)
+    beta2 = 0.5 * np.ones((height, width))
+    #print(f"Mine beta: {beta2}")
+    #for i in X:
+        #U = np.dot(beta[:,1:], i)
+        #print(softmax(U, beta))
+
+    multinomial = OrdinalLogReg()
+    multinomial.build(X, y)
+    #predict = multinomial.predict(X)
     '''
     beta = np.array([ 1,  1, 1, 1, 1])  # 3 classi
     x = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
@@ -182,7 +218,7 @@ if __name__ == "__main__":
     x_test, y_test = X[split:,:], y[split:]
     #print(x_test)
 
-    multinomial = MultinomialLogReg()
+    multinomial = OrdinalLogReg()
     multinomial.build(x_train,y_train)
     predict = multinomial.predict(x_test)
     print(missclassification(predict, y_test))
