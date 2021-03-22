@@ -4,7 +4,9 @@ import math
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 import random
+import seaborn as sns
 import scipy.stats as st
+import matplotlib.pyplot as plt
 
 
 
@@ -254,14 +256,122 @@ def CV_log_loss(X,y,k):
         naive_loss = naive_log_loss(y_test)
         naive_losses.append( naive_loss )
 
-    print(multi_losses)
-    print(ordinal_losses)
-    print(naive_losses)
 
-    multinomial_ci = st.t.interval(0.95, len(multi_losses) - 1, np.mean(multi_losses), st.sem(multi_losses))
-    ordinal_ci = st.t.interval(0.95, len(ordinal_losses) - 1, np.mean(ordinal_losses), st.sem(ordinal_losses))
-    naive_ci = st.t.interval(0.95, len(naive_losses) - 1, np.mean(naive_losses), st.sem(naive_losses))
-    return multinomial_ci, ordinal_ci, naive_ci
+    losses = [multi_losses, ordinal_losses, naive_losses]
+    intervals = []
+    for l in losses:
+        print(l)
+        print(f"mean: {np.mean(l)}, sd: {np.std(l)} ")
+        intervals.append( [ np.mean(l), np.std(l)] )
+
+    return intervals
+
+def CV_coefficients(X,y,k):
+    n = len(y)
+    coefs = [[] for _ in range(12)]
+    names = []
+    np.random.seed(2)
+    for _ in range(1000):
+        indexes = np.random.choice([i for i in range(250)], 250)
+        data_x = X[indexes].reshape((len(indexes),len(X[0])))
+        data_y = y[indexes]
+        ordinal = OrdinalLogReg()
+        ordinal_model = ordinal.build(data_x, data_y)
+        #coefs = np.append(coefs, ordinal_model.beta)
+        #names= np.append(names,['bias','age','sex','year','x1','x2','x3','x4','x5','x6','x7','x8'])
+        for i,j in enumerate(ordinal_model.beta):
+            coefs[i].append(j)
+
+    names = ['bias','age','sex','year','x1','x2','x3','x4','x5','x6','x7','x8']
+    means = []
+    lower = []
+    upper = []
+    for i, c in enumerate(coefs):
+        m = np.mean(c)
+        means.append(m)
+        interval = st.t.interval(0.95, len(c) - 1, loc=np.mean(c), scale=st.sem(c))
+        lower.append(m-interval[0] )
+        upper.append(interval[1]-m )
+    plt.bar(names, means, yerr =[lower,upper])
+    plt.savefig("coefficients.png")
+
+    plt.show()
+
+    #st.t.interval(0.95, len(a) - 1, loc=np.mean(a), scale=st.sem(a))
+
+
+    return 0
+
+
+
+def create_dataset():
+
+    X_train = []
+    y_train = []
+    X_test = []
+    y_test = []
+
+    random.seed(3)
+
+    x1 = lambda x,y : x**2 + random.uniform(-1,1)
+    x2 = lambda x,y : np.sin(x)+ 2.14/2 + 2*y + random.uniform(-1,1)
+    x3 = lambda x,y : -3 + random.uniform(-1,1)
+
+    xs = [x1,x2,x3]
+
+    for i in range(6):
+
+        y = i
+        xi = []
+        for x in xs:
+            xi.append(x(y,y))
+
+        X_train.append(xi)
+        y_train.append(y)
+
+    for _ in range(1000):
+        y = random.randint(0,5)
+        xi = []
+        for x in xs:
+            xi.append(x(y,y))
+
+        X_test.append(xi)
+        y_test.append(y)
+
+    X_train = np.array(X_train)
+    y_train = np.array(y_train)
+    X_test = np.array(X_test)
+    y_test = np.array(y_test)
+
+    df_train = pd.DataFrame({'Class': y_train, 'X1': X_train[:,0], 'X2': X_train[:,1], 'X3': X_train[:,2]})
+    df_train.to_csv('multinomial_bad_ordinal_good_train.csv',index=False,sep=';')
+
+    df_test = pd.DataFrame({'Class': y_test, 'X1': X_test[:, 0], 'X2': X_test[:, 1], 'X3': X_test[:, 2]})
+    df_test.to_csv('multinomial_bad_ordinal_good_test.csv', index=False,sep=';')
+
+    s = StandardScaler()
+    s.fit(X_train)
+    X_train = s.transform(X_train)
+    X_test = s.transform(X_test)
+
+    multinomial = MultinomialLogReg()
+    model = multinomial.build(X_train, y_train)
+    predict = model.predict(X_test)
+    print(missclassification(predict, y_test))
+    loss = model.log_loss(X_test, y_test)
+    print(loss)
+
+    multinomial = OrdinalLogReg()
+    model = multinomial.build(X_train, y_train)
+    predict = model.predict(X_test)
+    print(missclassification(predict, y_test))
+    loss = model.log_loss(X_test, y_test)
+    print(loss)
+
+
+
+
+
 
 
 
@@ -310,7 +420,21 @@ if __name__ == "__main__":
     print(missclassification(predict, y_test))
     loss = model.log_loss(x_test, y_test)
     print(loss)'''
-    print(CV_log_loss(X,y,5))
+    #print(CV_log_loss(X,y,10))
+    size = 4
+    Y = np.random.randint(0,5,size)
+    x1 = lambda y: y**2
+    x2 = lambda y: 3*y**3 + (y-3)**2
+    x3 = lambda y: -y + (y-1)**2 - y**3 + np.exp(y)
+
+    X1 = x1(Y)
+    X2 = x2(Y)
+    X3 = x3(Y)
+
+    #print(create_dataset())
+    CV_coefficients(X,y,5)
+    #sns.barplot(y=[1,2,3,4,5], x=[1,1,2,2,3], ci=90)
+    plt.show()
 
 
 
