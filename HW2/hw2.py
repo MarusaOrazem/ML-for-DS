@@ -12,9 +12,7 @@ import matplotlib.pyplot as plt
 
 def softmax(U,beta):
     result = []
-    #print(f"U : {len(U)}, beta : {len(beta)} ")
-    #print(U)
-    #print(beta)
+
     divider = 0
     for k, i in enumerate(U):
         divider += math.e ** (i + beta[k][0])
@@ -51,14 +49,11 @@ class MultinomialLogReg:
     def build(self,X,y):
         width = len(X[0])
         height = max(y)
-        #beta = 0.5*np.ones((height, width))
         shape = (len(list(set(y))) - 1, X.shape[1] + 1)
         beta = np.ones(shape) / 2
         #print(beta)
 
-
         ret = sc.fmin_l_bfgs_b(log_likelihood, x0 =beta, args = (X,y), approx_grad = True)
-        #print(ret)
         beta = ret[0].reshape(shape)
 
         model = MultinomialModel(beta)
@@ -94,34 +89,23 @@ class MultinomialModel:
 
 
 def inv_logit(x):
-    #return 1./(1.+math.e**(-x))
-    return 1 / 2 + 1 / 2 * np.tanh(x/2)
-
+    return 1./(1.+math.e**(-x))
 
 def ordinal_log_likelihood(beta, *args):
     X, y = args
     #print(beta)
     delta, beta = beta[:len(list(set(y)))-2], beta[len(list(set(y)))-2:]
-    #print(delta)
-    #print(beta)
     t = np.cumsum(delta)
     t = np.append([-np.inf, 0], t)
     t = np.append(t,[np.inf])
-    #print(f"t: {t}")
-    #print(f"beta: {beta}")
     l = 0
     eps = 1e-10
     for i, x in enumerate(X):
-        #print(f"x: {x}")
         real_class = y[i]
         ui = np.dot( beta[1:],x ) + beta[0]
-        #print(f"ui: {ui}")
         a = inv_logit( t[real_class+1]-ui )
         b = inv_logit( t[real_class]-ui )
         pi = a-b
-        #print(f"a: {a}")
-        #print(f"b: {b}")
-        #print(f"pi: {pi}")
         if pi < eps:
             pi = eps
         l -= math.log(pi)
@@ -258,11 +242,12 @@ def CV_log_loss(X,y,k):
 
 
     losses = [multi_losses, ordinal_losses, naive_losses]
+    names= ['Multi', 'Ordinal', 'Naive']
     intervals = []
-    for l in losses:
-        print(l)
-        print(f"mean: {np.mean(l)}, sd: {np.std(l)} ")
-        intervals.append( [ np.mean(l), np.std(l)] )
+    for i,l in enumerate(losses):
+        a = st.t.interval(0.95, len(l) - 1, loc=np.mean(l), scale=st.sem(l))
+        print(f"{names[i]} : {a}")
+        intervals.append( a )
 
     return intervals
 
@@ -277,8 +262,6 @@ def CV_coefficients(X,y,k):
         data_y = y[indexes]
         ordinal = OrdinalLogReg()
         ordinal_model = ordinal.build(data_x, data_y)
-        #coefs = np.append(coefs, ordinal_model.beta)
-        #names= np.append(names,['bias','age','sex','year','x1','x2','x3','x4','x5','x6','x7','x8'])
         for i,j in enumerate(ordinal_model.beta):
             coefs[i].append(j)
 
@@ -370,11 +353,6 @@ def create_dataset():
 
 
 
-
-
-
-
-
 if __name__ == "__main__":
 
     df = pd.read_csv('dataset.csv', sep=";")
@@ -406,7 +384,7 @@ if __name__ == "__main__":
     x_train, y_train = X[:split,:], y[:split]
     x_test, y_test = X[split:,:], y[split:]
 
-    '''
+
     multinomial = MultinomialLogReg()
     model = multinomial.build(x_train,y_train)
     predict = model.predict(x_test)
@@ -419,22 +397,15 @@ if __name__ == "__main__":
     predict = model.predict(x_test)
     print(missclassification(predict, y_test))
     loss = model.log_loss(x_test, y_test)
-    print(loss)'''
-    #print(CV_log_loss(X,y,10))
-    size = 4
-    Y = np.random.randint(0,5,size)
-    x1 = lambda y: y**2
-    x2 = lambda y: 3*y**3 + (y-3)**2
-    x3 = lambda y: -y + (y-1)**2 - y**3 + np.exp(y)
+    print(loss)
 
-    X1 = x1(Y)
-    X2 = x2(Y)
-    X3 = x3(Y)
 
-    #print(create_dataset())
+    CV_log_loss(X,y,10)
+
+    create_dataset()
+    
     CV_coefficients(X,y,5)
-    #sns.barplot(y=[1,2,3,4,5], x=[1,1,2,2,3], ci=90)
-    plt.show()
+
 
 
 
