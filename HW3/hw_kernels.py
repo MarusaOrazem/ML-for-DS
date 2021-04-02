@@ -3,6 +3,9 @@ import math
 import pandas as pd
 import matplotlib.pyplot as plt
 import random
+from sklearn.preprocessing import StandardScaler
+
+
 class KernelizedRidgeRegression:
     def __init__(self, kernel, lambda_):
         self.kernel = kernel
@@ -55,7 +58,7 @@ def sine_plot():
     y = df.iloc[:, -1].to_numpy()
     X = normalize(X)
 
-    kernels = [Polynomial(15), RBF(0.2)]
+    kernels = [Polynomial(10), RBF(0.1)]
     names = ['Polynomial kernel', 'RBF kernel']
     colors = ['r', 'g']
 
@@ -69,8 +72,9 @@ def sine_plot():
 
     plt.scatter(X_t, y, color='b', label='data  points', alpha=0.2)
     plt.legend()
-    plt.show()
     plt.savefig("sine.png")
+    plt.show()
+
 
 def RMSE(y1,y2):
     res = 0
@@ -86,7 +90,7 @@ def errors_polynomial(X,y):
 
     # test polynomial kermel
     M = [i for i in range(1, 11)]
-    lambdas = np.arange(0.5, 30, 0.5)
+    lambdas = np.arange(0.1, 100, 0.2)
     best_lambdas = []
     for m in M:
         final_rmse = []
@@ -125,7 +129,7 @@ def errors_polynomial(X,y):
                 rmse = RMSE(y_test_cv, predicted)
                 all_rmse.append(rmse)
             final_rmse.append(np.mean(all_rmse))
-
+        #print(final_rmse)
         best_lambdas.append(final_rmse.index(min(final_rmse)))
 
     # results for constant lambda
@@ -148,11 +152,13 @@ def errors_polynomial(X,y):
         rmse = RMSE(y_test, predicted)
         best_rmse_costant.append(rmse)
 
-        reg1 = KernelizedRidgeRegression(Polynomial(m), lambdas[i])
+        #print(lambdas[best_lambdas[i]])
+        reg1 = KernelizedRidgeRegression(Polynomial(m), lambdas[best_lambdas[i]])
         model1 = reg1.fit(x_train, y_train)
         predicted1 = model1.predict(x_test)
         rmse1 = RMSE(y_test, predicted1)
         best_rmse_cv.append(rmse1)
+
 
     plt.plot(M, best_rmse_costant, color='r', label='Constant lambda = 1')
     plt.plot(M, best_rmse_cv, color='g', label='Best lambda')
@@ -160,7 +166,9 @@ def errors_polynomial(X,y):
     plt.xlabel("M")
     plt.ylabel("RMSE")
     plt.legend()
+    plt.savefig("RMSE_polynomial.png")
     plt.show()
+
 
 def errors_RBF(X,y):
     n = 80 * len(y) // 100
@@ -168,8 +176,8 @@ def errors_RBF(X,y):
     x_train, y_train = X[:n, :], y[:n]
     x_test, y_test = X[n:, :], y[n:]
 
-    # test polynomial kermel
-    sigmas = np.arange(0.5, 20, 1)
+    # test polynomial kernel
+    sigmas = np.arange(0.1, 20, 0.1)
     lambdas = np.arange(0.001, 1, 0.01)
     best_lambdas = []
     for sigma in sigmas:
@@ -209,7 +217,7 @@ def errors_RBF(X,y):
                 rmse = RMSE(y_test_cv, predicted)
                 all_rmse.append(rmse)
             final_rmse.append(np.mean(all_rmse))
-
+        print(final_rmse)
         best_lambdas.append(final_rmse.index(min(final_rmse)))
 
     best_rmse_cv = []
@@ -222,7 +230,7 @@ def errors_RBF(X,y):
         rmse = RMSE(y_test, predicted)
         best_rmse_costant.append(rmse)
 
-        reg1 = KernelizedRidgeRegression(RBF(sigma), lambdas[i])
+        reg1 = KernelizedRidgeRegression(RBF(sigma), lambdas[best_lambdas[i]])
         model1 = reg1.fit(x_train, y_train)
         predicted1 = model1.predict(x_test)
         rmse1 = RMSE(y_test, predicted1)
@@ -235,17 +243,21 @@ def errors_RBF(X,y):
     plt.xlabel("sigma")
     plt.ylabel("RMSE")
     plt.legend()
+    plt.savefig("RMSE_RBF.png")
     plt.show()
 
 
-if __name__ == '__main__':
-    #sine_plot()
 
+if __name__ == '__main__':
+    sine_plot()
+
+    '''
     df = pd.read_csv('housing2r.csv', sep=',')
     X = df.iloc[:, :-1].to_numpy()
     X_t = X
     X = normalize(X)
     y = df.iloc[:, -1].to_numpy()
     errors_polynomial(X,y)
+    errors_RBF(X,y)'''
 
 
