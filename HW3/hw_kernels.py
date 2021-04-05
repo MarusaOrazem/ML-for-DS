@@ -3,7 +3,6 @@ import math
 import pandas as pd
 import matplotlib.pyplot as plt
 import random
-from sklearn.preprocessing import StandardScaler
 
 
 class KernelizedRidgeRegression:
@@ -49,7 +48,9 @@ class RBF:
         return math.e**(-norm/(2*self.sigma)**2)
 
 def normalize(X):
-    return (X - np.mean(X, axis=0)) / np.std(X, axis=0)
+    up = (X - np.mean(X, axis=0))
+    down = np.std(X, axis=0)
+    return up / down
 
 def sine_plot():
     df = pd.read_csv('sine.csv', sep=',')
@@ -132,15 +133,6 @@ def errors_polynomial(X,y):
         #print(final_rmse)
         best_lambdas.append(final_rmse.index(min(final_rmse)))
 
-    # results for constant lambda
-    '''
-    best_rmse_costant = []
-    for m in M:
-        reg = KernelizedRidgeRegression(Polynomial(m), 1)
-        model = reg.fit(x_train, y_train)
-        predicted = model.predict(x_test)
-        rmse = RMSE(y_test, predicted)
-        best_rmse_costant.append(rmse)'''
 
     best_rmse_cv = []
     # results for constant lambda
@@ -251,13 +243,13 @@ def errors_RBF(X,y):
 if __name__ == '__main__':
     sine_plot()
 
-    '''
+
     df = pd.read_csv('housing2r.csv', sep=',')
     X = df.iloc[:, :-1].to_numpy()
     X_t = X
     X = normalize(X)
     y = df.iloc[:, -1].to_numpy()
     errors_polynomial(X,y)
-    errors_RBF(X,y)'''
+    errors_RBF(X,y)
 
 
