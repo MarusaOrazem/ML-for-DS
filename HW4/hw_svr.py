@@ -70,7 +70,7 @@ class SVR:
         alphas = np.array(res['x'])
         #print(alphas)
         alphas = np.reshape(alphas,(len(X),2))
-        print(alphas.shape)
+        #print(alphas.shape)
 
         #epsilon okolica
         e1 = 1e-5
@@ -96,6 +96,8 @@ class SVR:
         upper = min(t2[indekses_final2])
         print("LOWER, UPPER")
         print(lower,upper)
+
+        self.vectors = np.where(abs(vector_diff)>1e-5)
 
 
 
@@ -144,11 +146,14 @@ def sine_plot():
 
     for i in range(2):
         k = kernels[i]
-        reg = SVR(k,0.1,0.5)
+        reg = SVR(k,1,0.5)
         model = reg.fit(normalize(X), y)
         predictions = model.predict(normalize(new_x))
         list1, list2 = zip(*sorted(zip(new_x, predictions)))
         plt.plot(list1, list2, label=names[i], color=colors[i])
+
+        vectors = reg.vectors
+        plt.scatter(sine_x[vectors], sine_y[vectors], color=colors[i], label='vectors')
 
     #print(X)
     #print(y)
@@ -176,6 +181,7 @@ if __name__ == '__main__':
     pred = m.predict(normalize(new_x))
     list1, list2 = zip(*sorted(zip(new_x, pred)))
     ax.plot(list1, list2, '-', label='RBF sigma=0.3')
+
     plt.show()
 
 
