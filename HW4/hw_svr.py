@@ -67,10 +67,14 @@ class SVR:
 
         b = matrix(0.)
 
-        res = solvers.qp(P=P*1.,q=q,G=G,h=h,A=A,b=b)
-        alphas = np.array(res['x'])
+        try:
+            res = solvers.qp(P=P*1.,q=q,G=G,h=h,A=A,b=b)
+            alphas = np.array(res['x'])
         #print(alphas)
-        alphas = np.reshape(alphas,(len(X),2))
+            alphas = np.reshape(alphas,(len(X),2))
+        except:
+            temp = np.random.rand(2*len(X))
+            alphas = np.reshape(temp, (len(X), 2))
         #print(alphas.shape)
 
         #epsilon okolica
@@ -171,13 +175,13 @@ def RMSE(y1,y2):
 
 def errors_RBF(X,y):
     n = 80 * len(y) // 100
-    k = 2
+    k = 10
     x_train, y_train = X[:n, :], y[:n]
     x_test, y_test = X[n:, :], y[n:]
 
     eps = 8
     # test polynomial kernel
-    sigmas = np.arange(0.1, 5, 0.1)
+    sigmas = np.arange(0.1, 10, 0.1)
     lambdas = np.arange(0.01, 1, 0.05)
     best_lambdas = []
     support_vectors = []
@@ -255,6 +259,7 @@ def errors_RBF(X,y):
     plt.ylabel("RMSE")
     plt.legend()
     plt.savefig("RMSE_RBF.png")
+    plt.show()
 
     plt.plot(sigmas, best_support_vectors, color='r', label='Constant lambda = 1')
     plt.plot(sigmas, support_vectors, color='g', label='Best lambda')
@@ -262,24 +267,25 @@ def errors_RBF(X,y):
     plt.xlabel("sigma")
     plt.ylabel("number of support vectors")
     plt.legend()
-    plt.savefig("RMSE_supp_vec.png")
+    plt.savefig("RBF_supp_vec.png")
     plt.show()
 
 
 def errors_polynomial(X,y):
     n = 80 * len(y) // 100
-    k = 2
+    eps = 1
+    k = 5
     x_train, y_train = X[:n, :], y[:n]
     x_test, y_test = X[n:, :], y[n:]
 
     # test polynomial kermel
     M = [i for i in range(1, 11)]
-    lambdas = np.arange(0.1, 10, 0.2)
+    lambdas = np.arange(0.1, 10, 0.1)
     best_lambdas = []
     for m in M:
         final_rmse = []
         for l in lambdas:
-            reg = SVR(Polynomial(m), l,2)
+            reg = SVR(Polynomial(m), l,eps)
             # we have the regressor, now perform k-fold cross validation and remember each RMSE
             n = len(y_train)
 
@@ -320,19 +326,27 @@ def errors_polynomial(X,y):
     best_rmse_cv = []
     # results for constant lambda
     best_rmse_costant = []
+    num_support_vec = []
+    num_support_vec1 = []
     for i, m in enumerate(M):
-        reg = SVR(Polynomial(m), 1,2)
+        reg = SVR(Polynomial(m), 1,eps)
         model = reg.fit(x_train, y_train)
         predicted = model.predict(x_test)
         rmse = RMSE(y_test, predicted)
+
         best_rmse_costant.append(rmse)
+        temp = reg.vectors
+        num_support_vec.append(len(temp[0]))
 
         #print(lambdas[best_lambdas[i]])
-        reg1 = SVR(Polynomial(m), lambdas[best_lambdas[i]],2)
+        reg1 = SVR(Polynomial(m), lambdas[best_lambdas[i]],eps)
         model1 = reg1.fit(x_train, y_train)
         predicted1 = model1.predict(x_test)
         rmse1 = RMSE(y_test, predicted1)
+
         best_rmse_cv.append(rmse1)
+        temp1 = reg1.vectors
+        num_support_vec1.append(len(temp1[0]))
 
 
     plt.plot(M, best_rmse_costant, color='r', label='Constant lambda = 1')
@@ -341,43 +355,34 @@ def errors_polynomial(X,y):
     plt.xlabel("M")
     plt.ylabel("RMSE")
     plt.legend()
+    plt.ylim(0,1000)
     plt.savefig("RMSE_polynomial.png")
+    plt.show()
+
+    plt.plot(M, num_support_vec, color='r', label='Constant lambda = 1')
+    plt.plot(M, num_support_vec1, color='g', label='Best lambda')
+    plt.title("Number of support vectors with polynomial kernel")
+    plt.xlabel("M")
+    plt.ylabel("number of support vectors")
+    plt.legend()
+    plt.ylim(0,200)
+    plt.savefig("Poly_supp_vec.png")
     plt.show()
 
 
 if __name__ == '__main__':
 
-    if False:
-        sine = pd.read_csv('sine.csv', sep=',')
-        sine_x = sine['x'].values
-        sine_y = sine['y'].values
-
-        new_data = np.arange(1, 20, step=0.2)
-        fig, ax = plt.subplots(1)
-        ax.plot(sine_x, sine_y, 'bo', label='Original data')
-
-        sine_x = sine_x.reshape((sine_x.shape[0], 1))
-        sine_y = sine_y.reshape((sine_y.shape[0], 1))
-        new_x = new_data.reshape((new_data.shape[0], 1))
-
-        fitter = SVR(kernel=RBF(sigma=0.3), lambda_=1, epsilon=0.2)
-        m = fitter.fit(normalize(sine_x), sine_y)
-        pred = m.predict(normalize(new_x))
-        list1, list2 = zip(*sorted(zip(new_x, pred)))
-        ax.plot(list1, list2, '-', label='RBF sigma=0.3')
-
-        plt.show()
-
+    if True:
         sine_plot()
 
     if True:
-        sine = pd.read_csv('housing2r.csv', sep=',')
-        sine_x = sine[['RM','AGE','DIS','RAD','TAX']].values
-        sine_y = sine['y'].values
+        housing = pd.read_csv('housing2r.csv', sep=',')
+        housing_x = housing[['RM','AGE','DIS','RAD','TAX']].values
+        housing_y = housing['y'].values
 
-        #sine_x = sine_x.reshape((sine_x.shape[0], 1))
-        sine_y = sine_y.reshape((sine_y.shape[0], 1))
+        housing_y = housing_y.reshape((housing_y.shape[0], 1))
 
-        errors_RBF(sine_x,sine_y)
+        errors_RBF(housing_x,housing_y)
+        errors_polynomial(housing_x, housing_y)
 
 
