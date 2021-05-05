@@ -1,0 +1,193 @@
+---
+title: "hw5"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```{r}
+toy_data <- function(n, seed = NULL) {
+set.seed(seed)
+x <- matrix(rnorm(8 * n), ncol = 8)
+z <- 0.4 * x[,1] - 0.5 * x[,2] + 1.75 * x[,3] - 0.2 * x[,4] + x[,5]
+y <- runif(n) > 1 / (1 + exp(-z))
+return (data.frame(x = x, y = y))
+}
+log_loss <- function(y, p) {
+-(y * log(p) + (1 - y) * log(1 - p))
+```
+
+
+```{r}
+df_dgp <- toy_data(100000, 0)
+toy <-toy_data(50,0)
+h <- glm(y~., data = toy, family= binomial)
+predicted <- predict(h, newdata = df_dgp[,-9], type = "response")
+gt <- as.numeric(df_dgp$y)
+true_risk <- mean(log_loss(gt, predicted))
+
+```
+
+```{r}
+estimates <- c()
+standard_errors <- c()
+contains_true_risk <- 0
+for (i in 1:1000) {
+  seed <- i**2
+  toy2 <- toy_data(50, seed)
+  predicted <- predict(h, newdata = toy2[,-9], type = "response")
+  gt <- as.numeric(toy2$y)
+  losses <- log_loss(gt, predicted)
+  estimates <- c(estimates, mean(losses))
+  standard_error <- sd(losses)/sqrt(length(losses))
+  standard_errors <- c(standard_errors, standard_error)
+  contains_true_risk <- contains_true_risk + (abs(mean(losses)-true_risk) < 2*standard_error)
+}
+contains_true_risk
+
+```
+
+```{r}
+library(ggplot2)
+x <- estimates - true_risk
+plot(density(x),main = "", xlab = "est risk - true risk")
+
+```
+
+```{r}
+#mean difference
+mean(x)
+```
+```{r}
+mean(log_loss(gt,rep(0.5,1000)))
+```
+```{r}
+median(standard_errors)
+```
+
+Overestimation of the deployed model's risk
+```{r}
+diff <- c()
+for (i in 1:50) {
+  seed1 <--i**2
+  seed2 <-(i)**2
+  toy1 <- toy_data(50,seed1)
+  toy2 <- toy_data(50,seed2)
+  h1 <- glm(y~., data = toy1, family= binomial)
+  toy_combined <- rbind(toy1, toy2)
+  h2 <- glm(y~., data = toy_combined, family= binomial)
+
+  predicted1 <- predict(h1, newdata = df_dgp[,-9], type = "response")
+  predicted2 <- predict(h2, newdata = df_dgp[,-9], type = "response")
+
+  true_risk1 <- mean(log_loss(df_dgp$y, predicted1))
+  true_risk2 <- mean(log_loss(df_dgp$y, predicted2))
+  diff <- c(diff, true_risk1-true_risk2)
+}
+summary(diff)
+```
+
+Loss estimator variability due to split variability
+```{r}
+set.seed(0)
+diff <- c()
+diff_plot <- c()
+standard_errors <- c()
+contains_true_risk <- 0
+
+toy <- toy_data(100,0)
+h0 <- glm(y~., data = toy, family= binomial)
+predicted0 <- predict(h0, newdata = df_dgp[,-9], type = "response")
+true_risk0 <- mean(log_loss(df_dgp$y, predicted0))
+  
+  
+for (i in 1:1000) {
+  set.seed(i ** 2)
+  splited <- split(toy, sample(rep(1:2,25)))
+  train <- splited$'1'
+  test <- splited$'2'
+  h <- glm(y~., data = train, family= binomial)
+  predicted <- predict(h, newdata = test[,-9], type = "response")
+  losses <- log_loss(test$y, predicted)
+  estimate <- mean(losses)
+
+  standard_error <- sd(losses)/sqrt(length(losses))
+  standard_errors <- c(standard_errors, standard_error)
+  contains_true_risk <- contains_true_risk + (abs(mean(losses)-true_risk0) < 2*standard_error)
+  diff <- c(diff, estimate-true_risk0)
+  diff_plot <- c(diff_plot, estimate - 0.5755)
+}
+#plot(density(diff_plot),main = "", xlab = "est risk - true risk", xlim=c(-0.25,2))
+ggplot(data.frame(diff_plot), aes(x=diff_plot)) + geom_density() + xlim(-0.25, 1.5) + ylim(0, 3)
+```
+```{r}
+mean(diff_plot)
+```
+```{r}
+median(standard_errors)
+```
+
+```{r}
+contains_true_risk
+```
+Cross-validation
+```{r}
+toy <-toy_data(100,0)
+h0 <- glm(y~., data = toy, family= binomial)
+predicted0 <- predict(h0, newdata = df_dgp[,-9], type = "response")
+true_risk0 <- mean(log_loss(df_dgp$y, predicted0))
+
+```
+
+```{r}
+k_CV <- function(k, data){
+  estimate <- 0
+  v <- rep(1:k, nrow(data)/k)
+  splited <- split(data,v)
+  estimates <- c()
+  for (fold in 1:k) {
+    index <- as.character(fold)
+    test <- splited$index
+    train <- data.frame()
+    for (i in 1:k) {
+      if(i != fold) {
+        j = as.character(i)
+        train <- rbind(train, splited$j)
+      }
+    }
+    #h <- glm(y~., data = train, family= binomial)
+    #predicted <- predict(h, newdata = test[,-9], type = "response")
+    #losses <- log_loss(test$y, predicted)
+    #estimate <- mean(losses)
+    #estimates <- c(estimates, estimate)
+  }
+  return(train)
+}
+```
+
+```{r}
+#2fold CV
+k_CV(2,toy)
+```
+
