@@ -1,6 +1,8 @@
 ---
-title: "hw5"
-output: html_document
+title: "Loss estimation homework"
+author: "Maruša Oražem"
+date: "5/5/2021"
+output: pdf_document
 ---
 
 ```{r setup, include=FALSE}
@@ -35,8 +37,29 @@ y <- runif(n) > 1 / (1 + exp(-z))
 return (data.frame(x = x, y = y))
 }
 log_loss <- function(y, p) {
--(y * log(p) + (1 - y) * log(1 - p))
+-(y * log(p) + (1 - y) * log(1 - p)) }
 ```
+
+A proxy for true risk.
+How did we determine that 100000 is enough to reduce the error to the 3rd decimal digit?
+The answer is the Central limit theorem. We are estimating the error of our risk to the true risk of the model, how much of the error have we made? We are using log_loss function and because of that we know that values will be between 0 and 1. Thats why the variance will be less than 1. If we are calculating 1 over square root of 100 000, we get 0.003... so a number that is different from zero at the third decimal digit.
+
+HOLDOUT ESTIMATION
+
+Model loss estimator variability due to a test data variability
+
+What do we see and what are the implications for practical use?
+Without estimation, try to answer: How qould these results change if the training set was larger/smaller? How would these results change if the test set was larger/smaller?
+
+If we look at the plot we got, we can see a long tail on the right. We can also see that the mode is slightly less than 0 and that big amount of the differences are less then 0. That means, that most of the time we will underestimate our model, but we will underestimate it just for a little. On the other hand, the long tail tells us that if we would overestimate it, we would do it big time.
+
+We have used two different data sets, so they are independent of eachother. We used one for training the model and one for predicting. We have calculated the bias and we can see that it is practically equal to zero. That confirms our thought earlier that the holdout estimation is unbiased.
+
+We can see that the median of standard errors is positive.
+
+If the training set was larger, we would train out model better and that's why we would get smaller risk. Similar, if we would have smaller training set, we would get bigger risk.
+
+If the test set would be bigger, it would mean that ehwn we would actually made final model, we would test it on that data also. So we would have smaller risk,  and that is why we would underestimate the performance of the model, because we would estimate bigger risk. Similar, if the test set would be smaller, we would still underestimate the model, because the data will be used at the end and the risk would be smaller but we would underestimate it less.
 
 
 ```{r}
@@ -87,11 +110,16 @@ median(standard_errors)
 ```
 
 Overestimation of the deployed model's risk
+What do we see and what are the implications for practical use?
+Without estimation, try to answer: How qould these results change if the training set was larger/smaller? How would these results change if the test set was larger/smaller?
+
+When we are estimating the performance of our model, we are splitting the available data to train and test data so we can estimate the performance. This is only an estimation but actual performance of the final model used will be different because we would train the model on all data instances. Because of the law of large numbers we know (or CLT?), that the model trained on more data instances, will perform better than the one on less data.
+
 ```{r}
 diff <- c()
 for (i in 1:50) {
-  seed1 <--i**2
-  seed2 <-(i)**2
+  seed1 <-i**2
+  seed2 <-(i)**3
   toy1 <- toy_data(50,seed1)
   toy2 <- toy_data(50,seed2)
   h1 <- glm(y~., data = toy1, family= binomial)
@@ -107,8 +135,17 @@ for (i in 1:50) {
 }
 summary(diff)
 ```
+From observing the summary above, we can confirm our thoughts earlier. Because estimation of the $h_1$ model has high variance, the differences get very high, which is proved with the maximum value in the summary. Meanwhile the minimum value is almost zero. The mean value is 0.6, which tells us that risk of the $h_1$ model is bigger then risk of $h_2$. As said before, this is to be expected, because models trained on more data instances, perform better (that are some rare cases that this does not hold).
+
+If the data sets were larger, we would than have more data instances to train and test the model. Therefore the variance of the first model $h_1$ would decrease and the same for the variance of the $h_2$. Consequence of that would be that the differences between them would also decrease. On the other hand, if we had smaller data available, the variances would increase and if the data would be small enough, variances of both models would be high and we could not distinguish between them.
+
+
 
 Loss estimator variability due to split variability
+
+We are now estimating the variability if we have different test sets. 
+
+
 ```{r}
 set.seed(0)
 diff <- c()
@@ -151,7 +188,15 @@ median(standard_errors)
 ```{r}
 contains_true_risk
 ```
+
+
+
 Cross-validation
+
+
+
+
+
 ```{r}
 toy <-toy_data(100,0)
 h0 <- glm(y~., data = toy, family= binomial)
@@ -162,32 +207,172 @@ true_risk0 <- mean(log_loss(df_dgp$y, predicted0))
 
 ```{r}
 k_CV <- function(k, data){
-  estimate <- 0
-  v <- rep(1:k, nrow(data)/k)
-  splited <- split(data,v)
-  estimates <- c()
-  for (fold in 1:k) {
-    index <- as.character(fold)
-    test <- splited$index
-    train <- data.frame()
-    for (i in 1:k) {
-      if(i != fold) {
-        j = as.character(i)
-        train <- rbind(train, splited$j)
-      }
-    }
-    #h <- glm(y~., data = train, family= binomial)
-    #predicted <- predict(h, newdata = test[,-9], type = "response")
-    #losses <- log_loss(test$y, predicted)
-    #estimate <- mean(losses)
-    #estimates <- c(estimates, estimate)
+  all_losses <- c()
+  n<- nrow(data)
+  indexes <- sample(1:n, n)
+  for(fold in 1:k) {
+    curr_indexes <- indexes[((fold-1)*n/k+1):(fold*n/k)]
+    train <- data[-curr_indexes,]
+    test <- data[curr_indexes,]
+    
+    h <- glm(y~., data = train, family= binomial)
+    predicted <- predict(h, newdata = test[,-9], type = "response")
+    
+    losses <- log_loss(test$y, predicted)
+    all_losses <- c(all_losses, losses)
+    estimate <- mean(losses)
+    estimates <- c(estimates, estimate)
   }
-  return(train)
+
+  return(list(all_losses, estimates))
+}
+```
+
+
+```{r}
+k_CV_special <- function(k, data){
+  all_losses <- c()
+  n<- nrow(data)
+  indexes <- sample(1:n, n)
+  for(fold in 1:k) {
+    taken <- ((fold-1)*n/k+1):(fold*n/k)
+    curr_indexes <- indexes[((fold-1)*n/k+1):(fold*n/k)]
+    train <- data[-curr_indexes,]
+    test <- data[curr_indexes,]
+    
+    h <- glm(y~., data = train, family= binomial)
+    predicted <- predict(h, newdata = test[,-9], type = "response")
+    
+    losses <- log_loss(test$y, predicted)
+    all_losses <- c(all_losses, losses)
+    estimate <- mean(losses)
+    estimates <- c(estimates, estimate)
+  }
+
+  return(list(all_losses, estimates, indexes))
 }
 ```
 
 ```{r}
-#2fold CV
-k_CV(2,toy)
+diff_2 <- c()
+diff_4 <- c()
+diff_10 <- c()
+diff_100 <- c()
+diff_2010 <- c()
+
+standard_error_2 <- c()
+standard_error_4 <- c()
+standard_error_10 <- c()
+standard_error_100 <- c()
+standard_error_2010 <- c()
+
+contains_true_risk_2 <- c()
+contains_true_risk_4 <- c()
+contains_true_risk_10 <- c()
+contains_true_risk_100 <- c()
+contains_true_risk_2010 <- c()
+for (i in 1:500) {
+  toy <-toy_data(100,i**2)
+  h0 <- glm(y~., data = toy, family= binomial)
+  predicted0 <- predict(h0, newdata = df_dgp[,-9], type = "response")
+  true_risk0 <- mean(log_loss(df_dgp$y, predicted0))
+
+  #2fold CV
+  result_2 <- k_CV(2,toy)
+  losses_2 <- result_2[[1]]
+  estimate_2 <- mean(result_2[[2]])
+  curr_error <- sd(losses_2)/sqrt(length(losses_2))
+  standard_error_2 <- c(standard_error_2, curr_error)
+  contains_true_risk_2 <- c(contains_true_risk_2, (abs(estimate_2-true_risk0) < 2*curr_error))
+  diff_2 <- c(diff_2,estimate_2-true_risk0)
+
+  #4fold CV
+  result_4 <- k_CV(4,toy)
+  losses_4 <- result_4[[1]]
+  estimate_4 <- mean(result_4[[2]])
+  curr_error <- sd(losses_4)/sqrt(length(losses_4))
+  standard_error_4 <- c(standard_error_4,curr_error)
+  contains_true_risk_4 <- c(contains_true_risk_4,(abs(estimate_4-true_risk0) < 2*curr_error))
+  diff_4 <- c(diff_4,estimate_4-true_risk0)
+
+  #10fold CV
+  result_10 <- k_CV(10,toy)
+  losses_10 <- result_10[[1]]
+  estimate_10 <- mean(result_10[[2]])
+  curr_error <- sd(losses_10)/sqrt(length(losses_10))
+  standard_error_10 <- c(standard_error_10,curr_error)
+  contains_true_risk_10 <- c(contains_true_risk_10,(abs(estimate_10-true_risk0) < 2*curr_error))
+  diff_10 <- c(diff_10,estimate_10-true_risk0)
+
+  #100fold CV
+  result_100 <- k_CV(100,toy)
+  losses_100 <- result_100[[1]]
+  estimate_100 <- mean(result_100[[2]])
+  curr_error <- sd(losses_100)/sqrt(length(losses_100))
+  standard_error_100 <- c(standard_error_100,curr_error)
+  contains_true_risk_100 <- c(contains_true_risk_100,(abs(estimate_100-true_risk0) < 2*curr_error))
+  diff_100 <- c(diff_100,estimate_100-true_risk0)
+
+  #20 times 10fold CV
+  "all_errors_2010 <- rep(0,100)
+  for(i in 1:20){
+    result_10_20 <- k_CV_special(10,toy)
+    losses_10_20 <- result_10_20[[1]]
+    taken <- result_10_20[[3]]
+    all_errors_2010 <- all_errors_2010 + losses_10_20[order(taken)]
+
+  }
+  all_errors_2010 <- all_errors_2010/20
+  estimate_10_20 <- mean(all_errors_2010)
+  standard_error_10_20 <- sd(all_errors_2010)/sqrt(length(all_errors_2010))
+  contains_true_risk_10_20 <- as.numeric((abs(estimate_10_20-true_risk0) < 2*standard_error_10_20))
+  diff_10_20 <- estimate_10_20-true_risk0
+  
+  contains_true_risk_2010 <- c(contains_true_risk_2010, contains_true_risk_10_20)
+  diff_2010 <- c(diff_2010,diff_10_20)
+  standard_error_2010 <- c(standard_error_2010, standard_error_10_20)"
+
+}
+
+
+```
+```{r}
+print("2fold")
+print(paste0("Mean difference: ", mean(diff_2)))
+print(paste0("Median standard error: ", median(standard_error_2)))
+print(paste0("Contain true risk: ", sum(contains_true_risk_2)/length(contains_true_risk_2)))
+print("----------------------------------")
+print("4fold")
+print(paste0("Mean difference: ", mean(diff_4)))
+print(paste0("Median standard error: ", median(standard_error_4)))
+print(paste0("Contain true risk: ", sum(contains_true_risk_4)/length(contains_true_risk_4)))
+print("----------------------------------")
+print("10fold")
+print(paste0("Mean difference: ", mean(diff_10)))
+print(paste0("Median standard error: ", median(standard_error_10)))
+print(paste0("Contain true risk: ", sum(contains_true_risk_10)/length(contains_true_risk_10)))
+print("----------------------------------")
+print("100fold")
+print(paste0("Mean difference: ", mean(diff_100)))
+print(paste0("Median standard error: ", median(standard_error_100)))
+print(paste0("Contain true risk: ", sum(contains_true_risk_100)/length(contains_true_risk_100)))
+print("----------------------------------")
+print("10-20fold")
+print(paste0("Mean difference: ", mean(diff_2010)))
+print(paste0("Median standard error: ", median(standard_error_2010)))
+print(paste0("Contain true risk: ", sum(contains_true_risk_2010)/length(contains_true_risk_2010)))
+```
+
+```{r}
+  
+  
+```
+
+```{r}
+
+```
+
+```{r}
+
 ```
 
