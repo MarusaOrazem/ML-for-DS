@@ -15,7 +15,7 @@ which are unrelated to the target variable. Because we generate the data, we kno
 data generating process, which will allow us to study the quality of our loss estimation.
 Note that we’ll be using negative log-loss (smaller is better) throughout this homework.
 
-```{r}
+```{r, echo = FALSE, warning = FALSE}
 library(ggplot2)
 
 toy_data <- function(n, seed = NULL) {
@@ -57,7 +57,7 @@ to the difference between the test data risk estimate and the true risk of a mod
 We are going to use a Bernoulli-logit GLM and train it on generated toy data set with 50 observations.  After that we are going to compute its true risk on $df_dgp$ data set that consist of 100000 observations. We will generate another dataset with 50 observations, estimate the risk using this dataset, compute standard error of the estimate and record if the 95% CI contains the true risk. We are going to repeat that 1000 times. After that we are going to plot a density estimate of the differences between estimates and the true risk proxy and stated some other results.
 
 
-```{r}
+```{r, echo = FALSE, warning = FALSE}
 df_dgp <- toy_data(100000, 0)
 toy <-toy_data(50,0)
 h <- glm(y~., data = toy, family= binomial)
@@ -67,7 +67,7 @@ true_risk <- mean(log_loss(gt, predicted))
 
 ```
 
-```{r}
+```{r, echo = FALSE, warning = FALSE}
 estimates <- c()
 standard_errors <- c()
 contains_true_risk <- 0
@@ -124,7 +124,7 @@ select the best learner and then deploy the model trained on more data, typicall
 More data typically means that the learner will produce a model with lower true risk. Let’s demostrate this: We are going to generate two datasets, each with 50 observations. We are goiong to train two different learner, one with only one data set and the other with both. We are going to calculate true risk proxy for each of the learners and repeat it 50 times.
 
 
-```{r}
+```{r, echo = FALSE, warning = FALSE}
 diff <- c()
 for (i in 1:50) {
   seed1 <-i**2
@@ -142,9 +142,11 @@ for (i in 1:50) {
   true_risk2 <- mean(log_loss(df_dgp$y, predicted2))
   diff <- c(diff, true_risk1-true_risk2)
 }
-summary(diff)
 ```
 
+```{r}
+summary(diff)
+```
 Because of the law of large numbers we know, that the model trained on more data instances, will perform better than the one on less data. We would get better performance with more data and less variance.
 
 From observing the summary above, we can confirm our thoughts. Because estimation of the $h_1$ model has high variance, the differences get very high, which is proved with the maximum value in the summary. Meanwhile the minimum value is almost zero. The mean value is 0.6, which tells us that risk of the $h_1$ model is bigger then risk of $h_2$. As said before, this is to be expected, because models trained on more data instances, perform better and variance gets smaller.
@@ -165,7 +167,7 @@ can add the most basic source of variability - the variability of the losses acr
 We are going to generate a dataset with 100 observations. We are going to use a learner on this dataset and compute true risk. Then we are going to split this dataset into test and training set and repeat it 1000 times.
 
 
-```{r}
+```{r, echo = FALSE, warning = FALSE}
 set.seed(0)
 diff <- c()
 diff_plot <- c()
@@ -195,8 +197,13 @@ for (i in 1:1000) {
   diff_plot <- c(diff_plot, estimate - 0.5755)
 }
 
+
+```
+
+```{r}
 ggplot(data.frame(diff_plot), aes(x=diff_plot)) + geom_density() + xlim(-0.25, 1.5) + ylim(0, 3)
 ```
+
 ```{r}
 print(paste0("True risk proxy: ", true_risk0))
 print(paste0("Average difference between estimate and true risk: ", mean(diff_plot)))
@@ -210,16 +217,20 @@ We can also see that when we are checking if the true risk proxy is in the 95% c
 
 If we had bigger data, estimations would have lower bias and lower true risk proxy. Because of the more data, variance of the estimator would be smaller.
 
-If we had bigger proportion of the training data, it would mean that we could better fit the model. That would mean we would have lower bias. If the training data would be bigger, that means
-
-če bi bil veči proportion training data, manjši bias, večji standard error, ker bo test size smaller, večja varianca.
-manjša trainin množica (večji test set), večji bias. večja varianca,ker slabo nafitan model.
-
-## Cross-validation
+If we had bigger proportion of the training data, it would mean that we could better fit the model. That would mean we would have lower bias. If the training data would be bigger, that would mean that test data would be smaller. That means we would get bigger standard error.
+If we turn things around and get smaller training size and bigger test size, everything said above would be true in the contrary.
 
 
+#### Cross-validation
+If we extrapolate the results so far to cross-validation, we can conclude that cross-validation estimates of true
+risk will also be biased and will contain a lot of variability if the dataset is relatively small. This variability
+will be both due to training set and due to test set variability on top of the inherent variability of the losses.
+Let’s explore this by also finally incorporating the variability caused by the draw of the dataset from the
+DGP, which we have up to this point kept fixed.
+We are going to create a dataset with 100 observations. We are going to use a learner on that dataset. Additionaly we are going to estimate 5 different estimators with 2-fold CV, leave one out CV, 10-fold CV, 4-fold CV and repeated 20 times 10-fold CV. We are going to repeat it 500 times.
 
-```{r}
+
+```{r, echo = FALSE, warning = FALSE}
 toy <-toy_data(100,0)
 h0 <- glm(y~., data = toy, family= binomial)
 predicted0 <- predict(h0, newdata = df_dgp[,-9], type = "response")
@@ -227,7 +238,7 @@ true_risk0 <- mean(log_loss(df_dgp$y, predicted0))
 
 ```
 
-```{r}
+```{r, echo = FALSE, warning = FALSE}
 k_CV <- function(k, data){
   all_losses <- c()
   n<- nrow(data)
@@ -252,7 +263,7 @@ k_CV <- function(k, data){
 ```
 
 
-```{r}
+```{r, echo = FALSE, warning = FALSE}
 k_CV_special <- function(k, data){
   all_losses <- c()
   n<- nrow(data)
@@ -277,7 +288,7 @@ k_CV_special <- function(k, data){
 }
 ```
 
-```{r}
+```{r, warning = FALSE, echo = FALSE}
 diff_2 <- c()
 diff_4 <- c()
 diff_10 <- c()
@@ -360,6 +371,7 @@ for (i in 1:500) {
 
 
 ```
+
 ```{r}
 print("2fold")
 print(paste0("Mean difference: ", mean(diff_2)))
@@ -386,37 +398,159 @@ print(paste0("Mean difference: ", mean(diff_2010)))
 print(paste0("Median standard error: ", median(standard_error_2010)))
 print(paste0("Contain true risk: ", sum(contains_true_risk_2010)/length(contains_true_risk_2010)))
 ```
+From the above results we can see that if we make more folds, we are performing better. By increasing the number of folds, we get lower differences and lower standard errors. If we look at the above results, we could say that leave one out is the best. But as we already know, this approach usually takes a lot of time, so we should consider in real life when we are deciding on what approach to use.
+
+
+
 ```{r}
-ggplot(data.frame(diff_2), aes(x=diff_2)) + geom_density()
+ggplot(data.frame(diff_2), aes(x=diff_2)) + geom_density() + xlim(c(-1,10))
 ```
 
 ```{r}
-ggplot(data.frame(diff_4), aes(x=diff_4)) + geom_density()
+ggplot(data.frame(diff_4), aes(x=diff_4)) + geom_density() + xlim(c(-1,10))
 
 ```
 ```{r}
-ggplot(data.frame(diff_10), aes(x=diff_10)) + geom_density()
+ggplot(data.frame(diff_10), aes(x=diff_10)) + geom_density()+ xlim(c(-1,10))
 
 ```
 ```{r}
-ggplot(data.frame(diff_2010), aes(x=diff_2010)) + geom_density()
+ggplot(data.frame(diff_2010), aes(x=diff_2010)) + geom_density() + xlim(c(-1,10))
 
 ```
 ```{r}
-ggplot(data.frame(diff_100), aes(x=diff_100)) + geom_density()
+ggplot(data.frame(diff_100), aes(x=diff_100)) + geom_density() + xlim(c(-1,10))
 
 ```
-  več foldov, bolš oceniš, boljši estimate.
-  ve
+
+If we now look at the plots, we can see that if we have more folds, the long tails on the right dissappears and also that the 'hill' is narrower. That was to be expected from the calculations and reasoning we have already made above.
+
+
+
+
+
+#### A different scenario
+In this section we are going to create a different dataset, where the results will disagree with our last experiment. We are going to construct a dataset that will have only two columns and those two will be dependent. We are also going to take a small amount of observations.
+
+
+```{r, echo = FALSE, warning = FALSE}
+toy_data_different <- function(n, seed = NULL) {
+set.seed(seed)
+x <- matrix(rnorm(n), ncol = 1)
+x2 <- 2*x
+y <- runif(n) > 1 / (1 + exp(-x-x2))
+return (data.frame(x = cbind(x,x2), y = y))
+}
+```
+
+```{r, warning = FALSE, echo = FALSE}
+df_dgp <- toy_data_different(100000, 0)
+
+diff_2 <- c()
+diff_4 <- c()
+diff_10 <- c()
+diff_100 <- c()
+diff_2010 <- c()
+
+standard_error_2 <- c()
+standard_error_4 <- c()
+standard_error_10 <- c()
+standard_error_100 <- c()
+standard_error_2010 <- c()
+
+contains_true_risk_2 <- c()
+contains_true_risk_4 <- c()
+contains_true_risk_10 <- c()
+contains_true_risk_100 <- c()
+contains_true_risk_2010 <- c()
+for (i in 1:500) {
+  toy <-toy_data_different(10,i**2)
+  h0 <- glm(y~., data = toy, family= binomial)
+  predicted0 <- predict(h0, newdata = df_dgp[,-9], type = "response")
+  true_risk0 <- mean(log_loss(df_dgp$y, predicted0))
+
+  #2fold CV
+  result_2 <- k_CV(2,toy)
+  losses_2 <- result_2[[1]]
+  estimate_2 <- mean(result_2[[2]])
+  curr_error <- sd(losses_2)/sqrt(length(losses_2))
+  standard_error_2 <- c(standard_error_2, curr_error)
+  contains_true_risk_2 <- c(contains_true_risk_2, (abs(estimate_2-true_risk0) < 2*curr_error))
+  diff_2 <- c(diff_2,estimate_2-true_risk0)
+
+  #4fold CV
+  result_4 <- k_CV(4,toy)
+  losses_4 <- result_4[[1]]
+  estimate_4 <- mean(result_4[[2]])
+  curr_error <- sd(losses_4)/sqrt(length(losses_4))
+  standard_error_4 <- c(standard_error_4,curr_error)
+  contains_true_risk_4 <- c(contains_true_risk_4,(abs(estimate_4-true_risk0) < 2*curr_error))
+  diff_4 <- c(diff_4,estimate_4-true_risk0)
+
+  #10fold CV
+  result_10 <- k_CV(10,toy)
+  losses_10 <- result_10[[1]]
+  estimate_10 <- mean(result_10[[2]])
+  curr_error <- sd(losses_10)/sqrt(length(losses_10))
+  standard_error_10 <- c(standard_error_10,curr_error)
+  contains_true_risk_10 <- c(contains_true_risk_10,(abs(estimate_10-true_risk0) < 2*curr_error))
+  diff_10 <- c(diff_10,estimate_10-true_risk0)
+
+  #100fold CV
+  result_100 <- k_CV(100,toy)
+  losses_100 <- result_100[[1]]
+  estimate_100 <- mean(result_100[[2]])
+  curr_error <- sd(losses_100)/sqrt(length(losses_100))
+  standard_error_100 <- c(standard_error_100,curr_error)
+  contains_true_risk_100 <- c(contains_true_risk_100,(abs(estimate_100-true_risk0) < 2*curr_error))
+  diff_100 <- c(diff_100,estimate_100-true_risk0)
+
+  #20 times 10fold CV
+  all_errors_2010 <- rep(0,100)
+  for(i in 1:20){
+    result_10_20 <- k_CV_special(10,toy)
+    losses_10_20 <- result_10_20[[1]]
+    taken <- result_10_20[[3]]
+    all_errors_2010 <- all_errors_2010 + losses_10_20[order(taken)]
+
+  }
+  all_errors_2010 <- all_errors_2010/20
+  estimate_10_20 <- mean(all_errors_2010)
+  standard_error_10_20 <- sd(all_errors_2010)/sqrt(length(all_errors_2010))
+  contains_true_risk_10_20 <- as.numeric((abs(estimate_10_20-true_risk0) < 2*standard_error_10_20))
+  diff_10_20 <- estimate_10_20-true_risk0
+
+  contains_true_risk_2010 <- c(contains_true_risk_2010, contains_true_risk_10_20)
+  diff_2010 <- c(diff_2010,diff_10_20)
+  standard_error_2010 <- c(standard_error_2010, standard_error_10_20)
+
+}
+```
 
 ```{r}
+print("2fold")
+print(paste0("Mean difference: ", mean(diff_2)))
+print(paste0("Median standard error: ", median(standard_error_2)))
+print(paste0("Contain true risk: ", sum(contains_true_risk_2)/length(contains_true_risk_2)))
+print("----------------------------------")
+print("4fold")
+print(paste0("Mean difference: ", mean(diff_4)))
+print(paste0("Median standard error: ", median(standard_error_4)))
+print(paste0("Contain true risk: ", sum(contains_true_risk_4)/length(contains_true_risk_4)))
+print("----------------------------------")
+print("10fold")
+print(paste0("Mean difference: ", mean(diff_10)))
+print(paste0("Median standard error: ", median(standard_error_10)))
+print(paste0("Contain true risk: ", sum(contains_true_risk_10)/length(contains_true_risk_10)))
+print("----------------------------------")
+print("100fold")
+print(paste0("Mean difference: ", mean(diff_100)))
+print(paste0("Median standard error: ", median(standard_error_100)))
+print(paste0("Contain true risk: ", sum(contains_true_risk_100)/length(contains_true_risk_100)))
+print("----------------------------------")
 print("10-20fold")
 print(paste0("Mean difference: ", mean(diff_2010)))
 print(paste0("Median standard error: ", median(standard_error_2010)))
 print(paste0("Contain true risk: ", sum(contains_true_risk_2010)/length(contains_true_risk_2010)))
 ```
-
-
-
-#A different scenario
-CV se dela samo na neodvisnih columnih za podatke! če bi imel dataset kjer bi bili stolpci odvisni ali pa zelo mali dataset.
+```
