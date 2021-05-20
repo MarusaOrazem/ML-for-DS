@@ -3,24 +3,32 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import fmin_l_bfgs_b
 
+def identity(x):
+    return x
 
-class ANNClassification:
+def mse(pred,y,a):
+    #diff = (pred-y)**2
+    #return np.mean(diff)
+    return np.mean((np.reshape(pred, (pred.shape[0],)) - y) ** 2)
 
-    def __init__(self, units= [], lambda_ = 0.1):
+class ANNRegression:
+
+    def __init__(self, units, lambda_ = 0):
         self.units = units
         self.lambda_ = lambda_
+        self.last = identity
+        self.loss = mse
 
     def fit(self, X, y):
         m = X.shape[1]
-        last_layer = len(np.unique(y))
-        self.classes = last_layer
-        layer_size = [m] + self.units + [2] #CHANGE THIS WHEN Y WILL HAVE ALL CLASSES
+        self.classes = 1
+        layer_size = [m] + self.units + [1] #CHANGE THIS WHEN Y WILL HAVE ALL CLASSES
 
         #create matrix of weights
         #weights0 = np.random.normal(size=(layer_size[-1],layer_size[0]))
         #weight0 = np.random.normal(size=(np.prod(layer_size) + 2*(len(layer_size)-1)))
-        weights0 = [ 0.81217268, -0.30587821, -0.26408588, -0.53648431,  0.43270381, -1.15076935, 0.87240588, -0.38060345,  0.15951955, -0.12468519,  0.73105397, -1.03007035]
-        print(f'Weights {weights0}')
+        #weights0 = [ 0.81217268, -0.30587821, -0.26408588, -0.53648431,  0.43270381, -1.15076935, 0.87240588, -0.38060345,  0.15951955, -0.12468519,  0.73105397, -1.03007035]
+        #print(f'Weights {weights0}')
         '''
         weights0 = []
         for i in range(len(layer_size)-1):
@@ -38,12 +46,68 @@ class ANNClassification:
 
         #print(gradient(weights0,X,y,layer_size))
 
-        def f(w) : return cost_function(w,X,y, layer_size)
-        def df(w) : return gradient(w,X,y,layer_size)
-        #print(f'############ {weights_test.shape}')
-        print(test_gradient(f,df , layer_size))
+        def f(w) : return cost_function(w,X,y, layer_size, self.lambda_, self.last, self.loss)
+        def df(w) : return gradient(w,X,y,layer_size, self.lambda_, self.last, self.loss)
 
-        #weights_opt, _, _ = fmin_l_bfgs_b(cost_function, weights0, fprime=gradient, args=(X, y), maxfun=1e6, maxiter=1e3, factr=1e9)
+
+        #print(f'############ {weights_test.shape}')
+        print(test_gradient(f,df ,layer_size, self.lambda_, self.last, self.loss))
+
+        n = sum([layer_size[i] * layer_size[i + 1] for i in range(len(layer_size) - 1)]) + sum([i for i in layer_size[:-1]])  # weights + bias
+        weights0 = np.random.normal(size=n)
+
+        weights_opt, _, _ = fmin_l_bfgs_b(cost_function, weights0, fprime=gradient, args=(X, y, layer_size, self.lambda_, self.last, self.loss), maxfun=1e6, maxiter=1e3, factr=1e9)
+        #print(weights_opt)
+
+class ANNClassification:
+
+    def __init__(self, units= [], lambda_ = 0.1):
+        self.units = units
+        self.lambda_ = lambda_
+        self.last = softmax
+        self.loss = log_loss
+
+
+    def fit(self, X, y):
+        m = X.shape[1]
+        last_layer = len(np.unique(y))
+        self.classes = last_layer
+        layer_size = [m] + self.units + [last_layer] #CHANGE THIS WHEN Y WILL HAVE ALL CLASSES
+
+        #create matrix of weights
+        #weights0 = np.random.normal(size=(layer_size[-1],layer_size[0]))
+        #weight0 = np.random.normal(size=(np.prod(layer_size) + 2*(len(layer_size)-1)))
+        #weights0 = [ 0.81217268, -0.30587821, -0.26408588, -0.53648431,  0.43270381, -1.15076935, 0.87240588, -0.38060345,  0.15951955, -0.12468519,  0.73105397, -1.03007035]
+        #print(f'Weights {weights0}')
+        '''
+        weights0 = []
+        for i in range(len(layer_size)-1):
+            temp = np.random.normal(size=(layer_size[i+1], layer_size[i]))
+            weights0.append(temp)'''
+        #print('weights')
+        #print(weights0)
+
+
+        #weights_test = np.array([np.array([[0.1,0.3],[0.2,0.4]]), np.array([[0.4,0.2],[0.3,0.1]])])
+        #grid(weights_test, layer_size)
+
+        #print(feed_forward(weights0,X, layer_size))
+        #print(cost_function(weights0,X,y,layer_size))
+
+        #print(gradient(weights0,X,y,layer_size))
+
+        def f(w) : return cost_function(w,X,y, layer_size, self.lambda_, self.last, self.loss)
+        def df(w) : return gradient(w,X,y,layer_size, self.lambda_, self.last, self.loss)
+
+
+        #print(f'############ {weights_test.shape}')
+        print(test_gradient(f,df ,layer_size, self.lambda_, self.last, self.loss))
+
+        n = sum([layer_size[i] * layer_size[i + 1] for i in range(len(layer_size) - 1)]) + sum([i for i in layer_size[:-1]])  # weights + bias
+        weights0 = np.random.normal(size=n)
+
+        #weights_opt, _, _ = fmin_l_bfgs_b(cost_function, weights0, fprime=gradient, args=(X, y, layer_size, self.lambda_, self.last, self.loss), maxfun=1e6, maxiter=1e3, factr=1e9)
+        #print(weights_opt)
 
 def grid(weights, layers):
     '''
@@ -51,7 +115,7 @@ def grid(weights, layers):
     for i in weights:
         grad_flatten += list(i.flatten())
     weights = grad_flatten'''
-    print(layers)
+    #print(layers)
     grid = []
     for i in range(len(layers)-1):
         try:
@@ -66,15 +130,19 @@ def grid(weights, layers):
 
 
 
-def cost_function(weights,X,y, layers):
+def cost_function(weights,X,y, layers, lambda_, last, loss):
     #weights = grid(weights, layers)
     #a = np.dot(weights,X.T)
     #print(f'a : {a}')
     #pred = sigmoid(a)
-    a = feed_forward(weights,X,layers)[-1]
+    a = feed_forward(weights,X,layers, lambda_, last)[-1]
     #pred = sigmoid(a)
     #last = softmax(pred) #DO WE NEED TO USE SOFTMAX AT LAST STEP?
-    return log_loss(a,y, 2 )
+    weights_grid = grid(weights, layers)
+    norms_w = 0
+    for w in weights_grid:
+        norms_w += np.sum(w[:-1,]**2)
+    return loss(a,y, layers[-1] ) + (lambda_/2)*norms_w
 
 def sigmoid(x):
     #print(1 / (1+np.exp(-x)))
@@ -96,9 +164,9 @@ def softmax(x):
     norm = np.sum(np.exp(x), axis=1, keepdims=True)
     return np.exp(x) / norm
 
-def feed_forward(weights,X, layers):
+def feed_forward(weights,X, layers, lambda_, last):
     weights = grid(weights, layers)
-    print(weights)
+    #print(weights)
     #ones = np.array([np.ones(X.shape[0])]).T
     #a = np.append(X, ones, axis = 1) #add ones for summing the biases
 
@@ -106,7 +174,7 @@ def feed_forward(weights,X, layers):
     a=np.append(X, ones, axis=1)
     a_list = [a]
     for weight in weights[:-1]:
-        print(f'a : {a}')
+        #print(f'a : {a}')
         a = np.array(sigmoid(a.dot(weight)))
         ones = np.array([np.ones(a.shape[0])]).T
         a = np.append(a, ones, axis=1)
@@ -115,15 +183,15 @@ def feed_forward(weights,X, layers):
         a_list.append(a)
 
 
-        print(f'aa:{a}')
+        #print(f'aa:{a}')
     #ones = np.array([np.ones(a_list[-1].shape[0])]).T
     #a = np.append(a_list[-1], ones, axis=1)
-    a_list.append(softmax(a.dot(weights[-1])))
+    a_list.append(last(a.dot(weights[-1])))
     return a_list
 
 
-def gradient(weights,X,y, layers):
-    a = feed_forward(weights,X, layers)
+def gradient(weights,X,y, layers, lambda_, last, loss):
+    a = feed_forward(weights,X, layers, lambda_, last)
     '''
     t = -1/a
     temp = np.zeros(num_classes)
@@ -184,6 +252,9 @@ def gradient(weights,X,y, layers):
     delta = [[] for _ in weights]
 
     if True:
+        delta[-1] = 2 * (a[-1] - np.reshape(y, a[-1].shape)) / len(y)
+        grad[-1] = a[-2].T.dot(delta[-1])
+    if False:
         delta[-1] = a[-1]
         delta[-1][range(len(y)), y] -= 1
         # delta[-1] /= len(y)
@@ -193,45 +264,52 @@ def gradient(weights,X,y, layers):
         weights_i = np.delete(weights[-i], -1, axis=0).T
         delta[-1 - i] = act_i * delta[-i].dot(weights_i)
         grad[-1 - i] = a[-2 - i].T.dot(delta[-1 - i])
-    return grad
+
+    #flat and normalize it
+    grad_flatten = []
+    #regularize
+    reg = []
+    for w in weights:
+        zeros = np.zeros((1, w.shape[1]))
+        reg+= list(np.append(w[:-1, ], zeros, axis = 0)*lambda_)
+
+    #grad_reg = [lambda_ * np.append(w[:-1, ], np.zeros((1, w.shape[1])), axis=0) for w in weights]
+    for j in grad:
+        grad_flatten += list(j.flatten()*(1/layers[-1]))
+
+    gg= []
+    for j in reg:
+        gg+=list(j.flatten())
 
 
-def test_gradient(f,df, layers):
+    return np.array(grad_flatten) + np.array(gg)
+
+
+def test_gradient(f,df, layers, lambda_, last, loss):
     eps = 1e-10
     tol = 1e-3
-    n = np.prod(layers) + sum([i for i in layers[:-1]]) #weights + bias
+    n = sum([layers[i]*layers[i+1] for i in range(len(layers)-1)]) + sum([i for i in layers[:-1]]) #weights + bias
     print(n)
     for _ in range(100):
-        #x0 = np.random.normal(size=n)
-        x0 = [ 0.81217268, -0.30587821, -0.26408588, -0.53648431,  0.43270381, -1.15076935, 0.87240588, -0.38060345,  0.15951955, -0.12468519,  0.73105397, -1.03007035]
+        x0 = np.random.normal(size=n)
 
-        #x0 = np.array([0.2,0.3,0.1,0.1])
-        #x0 = grid([x0], layers )
-        #x0 = np.array([[0.2,0.1], [0.3,0.1]])
-        #x0 = np.array([np.array([[0.1, 0.3], [0.2, 0.4]]), np.array([[0.4, 0.2], [0.3, 0.1]])])
-        #x0 = np.array(x0, dtype=object)
-        #x0 = np.array([np.array([np.random.normal(size=2), np.random.normal(size=2)])],dtype=object)
         for i in range(n):
             e_i = np.zeros(n)
             e_i[i] = eps
-            #e_i = grid(e_i, layers)
             grad = df(x0)
             grad_flatten = []
 
-            #e_i = np.array(e_i, dtype=object)
             for j in grad:
                 grad_flatten += list(j.flatten())
             grad_flatten = np.array(grad_flatten)
-            try:
-                fplus = f(np.add(x0 , e_i))
-            except:
-                a=3
+
+            fplus = f(np.add(x0 , e_i))
             fminus = f(x0)
-            if (fplus - fminus) / (eps)  - grad_flatten[i]*0.5 > tol:
-                a=3
+
+            if (fplus - fminus) / (eps)  - grad_flatten[i] > tol:
                 return False
             else:
-                print('|||||||||||||||||||||||||||||||||||||||||||||||||||||')
+                print('-------------')
 
 
     return True
@@ -245,10 +323,10 @@ if __name__ == '__main__':
     y = pd.read_csv('housing3.csv')[:1][['Class']].to_numpy()
     y = np.asarray(y=='C1', dtype = int)
     '''
-    X = np.array([[1, 0.3], [0.5, 0.6]])
-    y = np.array([0, 1])
+    X = np.array([[1, 0.3], [0.5, 0.6],[0,1]])
+    y = np.array([0, 1,1])
 
-    ann = ANNClassification([2])
+    ann = ANNRegression([2])
 
     ann.fit(X,y)
     #print(inv_sigmoid(np.array([0.8])))
