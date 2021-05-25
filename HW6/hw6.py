@@ -4,6 +4,9 @@ import pandas as pd
 import random
 import time
 from scipy.optimize import fmin_l_bfgs_b
+import scipy.stats as st
+from hw_kernels import KernelizedRidgeRegression, RBF
+from hw_tree import RandomForest
 
 def identity(x):
     return x
@@ -184,6 +187,11 @@ def log_loss(pred,y):
     losses = np.log(pred[temp,y])
     return -np.sum(losses) /len(y) #ALI JE TREBA TU DELIT Z DOLŽINO KLASOV?
 
+def log_loss2(pred,y):
+    pred = np.array(pred)
+    pred[pred == 0] = 1e-4
+    return -np.sum(np.multiply(y,np.log(pred)))/len(y)
+
 def softmax(x):
     norm = np.sum(np.exp(x), axis=1, keepdims=True)
     return np.exp(x) / norm
@@ -289,7 +297,7 @@ def test_gradient(f,df, layers, lambda_, last, loss):
 
 def cv(ann, X,y, units, lambdas, loss):
     n = 80 * len(y) // 100
-    k = 5
+    k = 10
     x_train, y_train = X[:n, :], y[:n]
     x_test, y_test = X[n:, :], y[n:]
 
@@ -297,10 +305,11 @@ def cv(ann, X,y, units, lambdas, loss):
     M = units
     best_lambdas = []
     final_rmse = []
+    final_all_rmse = []
     for m in M:
-        print(f"Units: {m}")
+        #print(f"Units: {m}")
         for l in lambdas:
-            print(f"lambda: {l}")
+            #print(f"lambda: {l}")
             reg = ann(units = m, lambda_ = l)
             # we have the regressor, now perform k-fold cross validation and remember each RMSE
             n = len(y_train)
@@ -334,47 +343,182 @@ def cv(ann, X,y, units, lambdas, loss):
                 predicted = model.predict(x_test_cv)
                 rmse = loss(predicted, y_test_cv)
                 all_rmse.append(rmse)
+            final_all_rmse.append(all_rmse)
             final_rmse.append([np.mean(all_rmse), m ,l])
 
 
     i = final_rmse.index(min(final_rmse, key = lambda x:x[0]))
-    return final_rmse[i]
+    rmses = final_all_rmse[i]
+    interval  = st.t.interval(0.95, len(rmses) - 1, loc=np.mean(rmses), scale=st.sem(rmses))
+    return final_rmse[i], interval
+
+def cv_h2(X,y, loss):
+    n = 80 * len(y) // 100
+    k = 10
+    x_train, y_train = X[:n, :], y[:n]
+    x_test, y_test = X[n:, :], y[n:]
+
+    # test polynomial kernel
+    sigmas = np.arange(1, 20, 0.1)
+    lambdas = np.arange(0.001, 1, 0.01)
+    final_rmse = []
+    final_all_rmse = []
+    for sigma in sigmas:
+        final_rmse = []
+        for l in lambdas:
+            reg = KernelizedRidgeRegression(RBF(sigma), l)
+            # we have the regressor, now perform k-fold cross validation and remember each RMSE
+            n = len(y_train)
+
+            # create indexes and shuffle them to get elements for k folds
+            i_shuffled = [i for i in range(n)]
+            random.seed(0)
+            random.shuffle(i_shuffled)
+            indexes_folds = []
+            for i in range(k):
+                j = i_shuffled[(i) * n // k: n * (i + 1) // k]
+                indexes_folds.append(j)  # save only indexes for each fold
+
+            all_rmse = []
+            for i in range(k):
+                all_folds = [j for j in range(k)]
+                all_folds.remove(i)  # remove the index for test fold
+
+                x_test_cv = X[indexes_folds[i]].reshape((len(indexes_folds[i]), len(X[0])))
+                y_test_cv = y[indexes_folds[i]]
+
+                x_train_cv = np.array([])
+                y_train_cv = np.array([])
+                for j in all_folds:
+                    x_train_cv = np.append(x_train_cv, X[indexes_folds[j]])
+                    y_train_cv = np.append(y_train_cv, y[indexes_folds[j]])
+
+                x_train_cv = x_train_cv.reshape(((k - 1) * n // k, len(X[0])))
+                # fit model and calculate RMSE
+                model = reg.fit(x_train_cv, y_train_cv)
+                predicted = model.predict(x_test_cv)
+                rmse = loss(y_test_cv, predicted)
+                all_rmse.append(rmse)
+            final_all_rmse.append(all_rmse)
+            final_rmse.append([np.mean(all_rmse), sigma, l])
+
+        i = final_rmse.index(min(final_rmse, key=lambda x: x[0]))
+        rmses = final_all_rmse[i]
+        interval = st.t.interval(0.95, len(rmses) - 1, loc=np.mean(rmses), scale=st.sem(rmses))
+        return final_rmse[i], interval
+
+def cv_h3(X,y, loss):
+    n = 80 * len(y) // 100
+    k = 10
+    x_train, y_train = X[:n, :], y[:n]
+    x_test, y_test = X[n:, :], y[n:]
+
+
+    final_rmse = []
+    final_all_rmse = []
+    reg = RandomForest(random.Random(1), 100, 2)
+    # we have the regressor, now perform k-fold cross validation and remember each RMSE
+    n = len(y_train)
+
+    # create indexes and shuffle them to get elements for k folds
+    i_shuffled = [i for i in range(n)]
+    random.seed(0)
+    random.shuffle(i_shuffled)
+    indexes_folds = []
+    for i in range(k):
+        j = i_shuffled[(i) * n // k: n * (i + 1) // k]
+        indexes_folds.append(j)  # save only indexes for each fold
+
+    all_rmse = []
+    for i in range(k):
+        all_folds = [j for j in range(k)]
+        all_folds.remove(i)  # remove the index for test fold
+
+        x_test_cv = X[indexes_folds[i]].reshape((len(indexes_folds[i]), len(X[0])))
+        y_test_cv = y[indexes_folds[i]]
+
+        x_train_cv = np.array([])
+        y_train_cv = np.array([])
+        for j in all_folds:
+            x_train_cv = np.append(x_train_cv, X[indexes_folds[j]])
+            y_train_cv = np.append(y_train_cv, y[indexes_folds[j]])
+
+        x_train_cv = x_train_cv.reshape(((k - 1) * n // k, len(X[0])))
+        # fit model and calculate RMSE
+        model = reg.build(x_train_cv, y_train_cv)
+        predicted = model.predict(x_test_cv)
+        rmse = loss(y_test_cv, predicted)
+        all_rmse.append(rmse)
+    final_all_rmse.append(all_rmse)
+    final_rmse.append([np.mean(all_rmse)])
+
+    i = final_rmse.index(min(final_rmse, key=lambda x: x[0]))
+    rmses = final_all_rmse[i]
+    interval = st.t.interval(0.95, len(rmses) - 1, loc=np.mean(rmses), scale=st.sem(rmses))
+    return final_rmse[i], interval
 
 def housing2():
     df = pd.read_csv('housing2r.csv', sep=',')
     X = df.iloc[:, :-1].to_numpy()
-    X_t = X
     X = normalize(X)
     y = df.iloc[:, -1].to_numpy()
 
     t1 = time.time()
     c = cv(ANNRegression, X, y,
-           [[2], [2, 2], [3, 3], [2, 2, 2], [3, 3, 3], [4, 4, 4], [2, 3, 4], [5, 4, 3], [3, 3, 3, 3, 3],
-            [9, 4, 2, 2, 6, 8]], [0.0000001, 0.000001, 0.00001, 0.0001, 0.001, 0.1], mse)
+           [[],[5,2,5], [5,2,2],[20],[5,10,5],[3,3,10,3,3],[15,10]], [0.0000001, 0.000001, 0.00001, 0.0001, 0.001, 0.1], mse)
     t2 = time.time()
-    print(t2 - t1)
     print(c)
+
+    c_rbf = cv_h2(X,y,mse)
+    print(c_rbf)
+
+    n = 80 * len(y) // 100
+    x_train, y_train = X[:n, :], y[:n]
+    x_test, y_test = X[n:, :], y[n:]
+
+    m1 = ANNRegression(c[0][1], c[0][2]).fit(x_train, y_train)
+    m2 = KernelizedRidgeRegression(RBF(c_rbf[0][1]), c_rbf[0][2]).fit(x_train, y_train)
+    names = ['ANN', 'KernelizedRidgeRegression']
+    i = 0
+    for m in [m1,m2]:
+        p = m.predict(x_test)
+        print(names[i])
+        print(mse(p,y_test))
+        i+=1
+
+
 
 def housing3():
     df = pd.read_csv('housing3.csv', sep=',')
     X = df.iloc[:, :-1].to_numpy()
-    X_t = X
     X = normalize(X)
     y = df.iloc[:, -1]
     y = np.asarray(y == "C1", dtype=int)
 
-    t1 = time.time()
+    n = 80 * len(y) // 100
+    x_train, y_train = X[:n, :], y[:n]
+    x_test, y_test = X[n:, :], y[n:]
+    '''
     c = cv(ANNClassification, X, y,
-           [[2], [2, 2], [3, 3], [2, 2, 2], [3, 3, 3], [4, 4, 4], [2, 3, 4], [5, 4, 3], [3, 3, 3, 3, 3],
-            [9, 4, 2, 2, 6, 8]], [0.0000001, 0.000001, 0.00001, 0.0001, 0.001, 0.1], log_loss)
-    t2 = time.time()
-    print(t2 - t1)
+           [[],[2,2,2],[5,5,5],[2,13,2],[13],[10,13,4]], [0.0000001, 0.000001, 0.00001, 0.0001, 0.001, 0.1], log_loss)
     print(c)
+
+    c2 = cv_h3(X,y, log_loss)
+    
+
+    m1 = ANNClassification(c[0][1], c[0][2]).fit(x_train, y_train)
+    p = m1.predict(x_test)
+    print('ANN')
+    print(log_loss(p, y_test))'''
+
+    m2 = RandomForest(random.Random(1),100,2).build(x_train,y_train)
+    p = m2.predict(x_test)
+    print('RandomForest')
+    print(log_loss2(p,y_test))
 
 def huge_dataset():
     df = pd.read_csv('train.csv', sep=',')
     X = df.iloc[:, :-1].to_numpy()
-    X_t = X
     X = normalize(X)
     y = df.iloc[:, -1].to_numpy()
     print(np.unique(y))
@@ -383,8 +527,7 @@ def huge_dataset():
 
     t1 = time.time()
     c = cv(ANNClassification, X, y,
-           [[2], [2, 2], [3, 3], [2, 2, 2], [3, 3, 3], [4, 4, 4], [2, 3, 4], [5, 4, 3], [3, 3, 3, 3, 3],
-            [9, 4, 2, 2, 6, 8]], [0.0000001, 0.000001, 0.00001, 0.0001, 0.001, 0.1], log_loss)
+           [[15,15,15,15,15],[10,10,10],[20,20,20],[10,10],[50,50,50,50],[80,80]], [0.0000001, 0.000001, 0.00001], log_loss)
     t2 = time.time()
     print(t2 - t1)
     print(c)
@@ -415,5 +558,5 @@ if __name__ == '__main__':
     #model = ann.fit(X,y)
     #p = model.predict(X)
     #print(p)
-    #housing2()
-    huge_dataset()
+    housing3()
+    #huge_dataset()
