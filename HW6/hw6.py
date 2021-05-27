@@ -7,13 +7,12 @@ from scipy.optimize import fmin_l_bfgs_b
 import scipy.stats as st
 from hw_kernels import KernelizedRidgeRegression, RBF
 from hw_tree import RandomForest
+import csv
 
 def identity(x):
     return x
 
 def mse(pred,y):
-    #diff = (pred-y)**2
-    #return np.mean(diff)
     return np.mean((np.reshape(pred, (pred.shape[0],)) - y) ** 2)
 
 class ANNModel():
@@ -45,27 +44,6 @@ class ANNRegression:
         self.classes = 1
         layer_size = [m] + self.units + [1] #CHANGE THIS WHEN Y WILL HAVE ALL CLASSES
 
-        #create matrix of weights
-        #weights0 = np.random.normal(size=(layer_size[-1],layer_size[0]))
-        #weight0 = np.random.normal(size=(np.prod(layer_size) + 2*(len(layer_size)-1)))
-        #weights0 = [ 0.81217268, -0.30587821, -0.26408588, -0.53648431,  0.43270381, -1.15076935, 0.87240588, -0.38060345,  0.15951955, -0.12468519,  0.73105397, -1.03007035]
-        #print(f'Weights {weights0}')
-        '''
-        weights0 = []
-        for i in range(len(layer_size)-1):
-            temp = np.random.normal(size=(layer_size[i+1], layer_size[i]))
-            weights0.append(temp)'''
-        #print('weights')
-        #print(weights0)
-
-
-        #weights_test = np.array([np.array([[0.1,0.3],[0.2,0.4]]), np.array([[0.4,0.2],[0.3,0.1]])])
-        #grid(weights_test, layer_size)
-
-        #print(feed_forward(weights0,X, layer_size))
-        #print(cost_function(weights0,X,y,layer_size))
-
-        #print(gradient(weights0,X,y,layer_size))
 
         def f(w) : return cost_function(w,X,y, layer_size, self.lambda_, self.last, self.loss)
         def df(w) : return gradient(w,X,y,layer_size, self.lambda_, self.last, self.loss)
@@ -98,28 +76,6 @@ class ANNClassification:
         self.classes = last_layer
         layer_size = [m] + self.units + [last_layer] #CHANGE THIS WHEN Y WILL HAVE ALL CLASSES
 
-        #create matrix of weights
-        #weights0 = np.random.normal(size=(layer_size[-1],layer_size[0]))
-        #weight0 = np.random.normal(size=(np.prod(layer_size) + 2*(len(layer_size)-1)))
-        #weights0 = [ 0.81217268, -0.30587821, -0.26408588, -0.53648431,  0.43270381, -1.15076935, 0.87240588, -0.38060345,  0.15951955, -0.12468519,  0.73105397, -1.03007035]
-        #print(f'Weights {weights0}')
-        '''
-        weights0 = []
-        for i in range(len(layer_size)-1):
-            temp = np.random.normal(size=(layer_size[i+1], layer_size[i]))
-            weights0.append(temp)'''
-        #print('weights')
-        #print(weights0)
-
-
-        #weights_test = np.array([np.array([[0.1,0.3],[0.2,0.4]]), np.array([[0.4,0.2],[0.3,0.1]])])
-        #grid(weights_test, layer_size)
-
-        #print(feed_forward(weights0,X, layer_size))
-        #print(cost_function(weights0,X,y,layer_size))
-
-        #print(gradient(weights0,X,y,layer_size))
-
         def f(w) : return cost_function(w,X,y, layer_size, self.lambda_, self.last, self.loss)
         def df(w) : return gradient(w,X,y,layer_size, self.lambda_, self.last, self.loss)
 
@@ -137,12 +93,7 @@ class ANNClassification:
         return ANNModel(weights_opt, self.units, self.lambda_, layer_size, self.last, self.loss)
 
 def grid(weights, layers):
-    '''
-    grad_flatten = []
-    for i in weights:
-        grad_flatten += list(i.flatten())
-    weights = grad_flatten'''
-    #print(layers)
+
     grid = []
     for i in range(len(layers)-1):
         try:
@@ -163,7 +114,6 @@ def cost_function(weights,X,y, layers, lambda_, last, loss):
     #pred = sigmoid(a)
     a = feed_forward(weights,X,layers, last)[-1]
     #pred = sigmoid(a)
-    #last = softmax(pred) #DO WE NEED TO USE SOFTMAX AT LAST STEP?
     weights_grid = grid(weights, layers)
     norms_w = 0
     for w in weights_grid:
@@ -185,12 +135,18 @@ def log_loss(pred,y):
     temp = [i for i in range(len(y))]
     y = np.array(list(map(lambda x: int(x), y)))
     losses = np.log(pred[temp,y])
-    return -np.sum(losses) /len(y) #ALI JE TREBA TU DELIT Z DOLŽINO KLASOV?
+    return -np.sum(losses) /len(y)
 
-def log_loss2(pred,y):
-    pred = np.array(pred)
-    pred[pred == 0] = 1e-4
-    return -np.sum(np.multiply(y,np.log(pred)))/len(y)
+def missclassification( predicted, real ):
+    if( len(predicted) != len(real) ):
+        return ""
+    if( len(real) == 0):
+        return 1
+    count = 0
+    for i,j in enumerate( predicted ):
+        if( j == real[ i ]):
+            count += 1
+    return 1-count/len(real)
 
 def softmax(x):
     norm = np.sum(np.exp(x), axis=1, keepdims=True)
@@ -265,7 +221,7 @@ def gradient(weights,X,y, layers, lambda_, last, loss):
 def test_gradient(f,df, layers, lambda_, last, loss):
     eps = 1e-10
     tol = 1e-3
-    n = sum([layers[i]*layers[i+1]+1 for i in range(len(layers)-1)]) #+ sum([i for i in layers[:-1]]) #weights + bias
+    n = sum([layers[i]*layers[i+1]+1 for i in range(len(layers)-1)])
     print(n)
     for _ in range(100):
         #x0 = np.random.normal(size=n)
@@ -307,9 +263,9 @@ def cv(ann, X,y, units, lambdas, loss):
     final_rmse = []
     final_all_rmse = []
     for m in M:
-        #print(f"Units: {m}")
+        print(f"Units: {m}")
         for l in lambdas:
-            #print(f"lambda: {l}")
+            print(f"lambda: {l}")
             reg = ann(units = m, lambda_ = l)
             # we have the regressor, now perform k-fold cross validation and remember each RMSE
             n = len(y_train)
@@ -343,14 +299,19 @@ def cv(ann, X,y, units, lambdas, loss):
                 predicted = model.predict(x_test_cv)
                 rmse = loss(predicted, y_test_cv)
                 all_rmse.append(rmse)
-            final_all_rmse.append(all_rmse)
-            final_rmse.append([np.mean(all_rmse), m ,l])
+
+            #final_all_rmse.append(all_rmse)
+            #final_rmse.append([np.mean(all_rmse), m ,l])
+            print('rmse')
+            print(np.mean(all_rmse))
+            interval = st.t.interval(0.95, len(all_rmse) - 1, loc=np.mean(all_rmse), scale=st.sem(all_rmse))
+            print(interval)
 
 
-    i = final_rmse.index(min(final_rmse, key = lambda x:x[0]))
-    rmses = final_all_rmse[i]
-    interval  = st.t.interval(0.95, len(rmses) - 1, loc=np.mean(rmses), scale=st.sem(rmses))
-    return final_rmse[i], interval
+    #i = final_rmse.index(min(final_rmse, key = lambda x:x[0]))
+    #rmses = final_all_rmse[i]
+    #interval  = st.t.interval(0.95, len(rmses) - 1, loc=np.mean(rmses), scale=st.sem(rmses))
+    #return final_rmse[i], interval
 
 def cv_h2(X,y, loss):
     n = 80 * len(y) // 100
@@ -447,7 +408,7 @@ def cv_h3(X,y, loss):
         # fit model and calculate RMSE
         model = reg.build(x_train_cv, y_train_cv)
         predicted = model.predict(x_test_cv)
-        rmse = loss(y_test_cv, predicted)
+        rmse = loss(predicted, y_test_cv)
         all_rmse.append(rmse)
     final_all_rmse.append(all_rmse)
     final_rmse.append([np.mean(all_rmse)])
@@ -498,23 +459,25 @@ def housing3():
     n = 80 * len(y) // 100
     x_train, y_train = X[:n, :], y[:n]
     x_test, y_test = X[n:, :], y[n:]
-    '''
+
     c = cv(ANNClassification, X, y,
-           [[],[2,2,2],[5,5,5],[2,13,2],[13],[10,13,4]], [0.0000001, 0.000001, 0.00001, 0.0001, 0.001, 0.1], log_loss)
+           [[13]], [0.001], log_loss)
     print(c)
 
-    c2 = cv_h3(X,y, log_loss)
+    c2 = cv_h3(X,y, missclassification)
+    print(c2)
     
 
     m1 = ANNClassification(c[0][1], c[0][2]).fit(x_train, y_train)
     p = m1.predict(x_test)
+    p = [np.argmax(i) for i in p]
     print('ANN')
-    print(log_loss(p, y_test))'''
+    print(missclassification(p, y_test))
 
     m2 = RandomForest(random.Random(1),100,2).build(x_train,y_train)
     p = m2.predict(x_test)
     print('RandomForest')
-    print(log_loss2(p,y_test))
+    print(missclassification(p,y_test))
 
 def huge_dataset():
     df = pd.read_csv('train.csv', sep=',')
@@ -527,13 +490,43 @@ def huge_dataset():
 
     t1 = time.time()
     c = cv(ANNClassification, X, y,
-           [[15,15,15,15,15],[10,10,10],[20,20,20],[10,10],[50,50,50,50],[80,80]], [0.0000001, 0.000001, 0.00001], log_loss)
+           [[15,15],[10],[20,20,20],[50,50],[80]], [0.00001], log_loss)
     t2 = time.time()
     print(t2 - t1)
-    print(c)
+
+    return c
 
 
+def create_final_predictions():
 
+    est = huge_dataset()
+    print(est)
+
+    df = pd.read_csv('train.csv', sep=',')
+    X = df.iloc[:, :-1].to_numpy()
+    X = normalize(X)
+    y = df.iloc[:, -1].to_numpy()
+    print(np.unique(y))
+    y = np.array(list(map(lambda x: int(x[-1]) - 1, y)))
+    # y = np.asarray(y == "C1", dtype=int)
+
+    units = []
+    lambda_ = 3
+    t1 = time.time()
+    c = ANNClassification(units, lambda_).fit(X,y)
+    t2 = time.time()
+
+    test = normalize( pd.read_csv('train.csv', sep=',').to_numpy() )
+    predict = c.predict(test)
+    t3 = time.time()
+
+    print(f'Fitting time: {t2-t1}')
+    print(f'Predicting time: {t3-t2}')
+
+    with open('final.txt', 'w+') as file:
+        employee_writer = csv.writer(file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+        for i in range(predict.shape[0]):
+            employee_writer.writerow(np.append([i] + predict[i, :]))
 
 
 
@@ -545,18 +538,12 @@ def normalize(X):
 
 if __name__ == '__main__':
     np.random.seed(1)
-    '''
-    X = pd.read_csv('housing3.csv')[:1][['CRIM', 'INDUS']].to_numpy()
-    y = pd.read_csv('housing3.csv')[:1][['Class']].to_numpy()
-    y = np.asarray(y=='C1', dtype = int)
-    '''
-    X = np.array([[1, 0.3], [0.5, 0.6],[0.1,0.3], [0.3,0.6], [1,0], [1, 0.3], [0.5, 0.6],[0.1,0.3]])
-    y = np.array([0,1,1,1,0, 0,1,1])
+
 
     #ann = ANNClassification([], 0)
 
     #model = ann.fit(X,y)
     #p = model.predict(X)
     #print(p)
-    housing3()
-    #huge_dataset()
+    #housing3()
+    huge_dataset()
